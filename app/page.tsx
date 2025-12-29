@@ -28,6 +28,9 @@ export default function DashboardPage() {
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [rowLimit, setRowLimit] = useState("10")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  
+  // ⭐️ 인터랙티브 필터: 차트에서 선택한 카테고리 값을 저장
+  const [filterValue, setFilterValue] = useState<string | null>(null)
 
   useEffect(() => {
     setIsClient(true)
@@ -35,9 +38,10 @@ export default function DashboardPage() {
 
   const analyzeFile = useCallback(async (file: File, targetColumn?: string, limit?: string) => {
     setIsAnalyzing(true)
-    // 분석 시작 시 즉시 이전 상태를 제거하여 DOM 충돌 방지
     setResult(null) 
     setSelectedAnalysis(null)
+    setFilterValue(null) // ⭐️ 새로운 분석 시 기존 필터 초기화
+    
     if (!targetColumn) setSelectedPreset(null)
 
     try {
@@ -119,6 +123,7 @@ export default function DashboardPage() {
                             } else {
                               setSelectedPreset(null)
                               setSelectedAnalysis(null)
+                              setFilterValue(null) // ⭐️ 프리셋 해제 시 필터도 해제
                             }
                           }}
                         >
@@ -149,15 +154,23 @@ export default function DashboardPage() {
                       key={`chart-area-${selectedPreset}-${result.preview_rows.length}`} 
                       className="w-full min-h-[450px]"
                     >
+                      {/* ⭐️ 인터랙티브 필터 적용: 클릭 이벤트와 현재 필터값 전달 */}
                       <VisualInsight
                         selectedAnalysis={selectedAnalysis}
                         headers={result.headers}
                         previewRows={result.preview_rows}
+                        onElementClick={setFilterValue} 
+                        activeFilter={filterValue}
                       />
                     </div>
                   )}
                   
-                  <DataTable result={result} />
+                  {/* ⭐️ 인터랙티브 필터 적용: 어떤 컬럼을 어떤 값으로 필터링할지 전달 */}
+                  <DataTable 
+                    result={result} 
+                    filterColumn={selectedAnalysis?.column}
+                    filterValue={filterValue}
+                  />
                 </div>
               )
             )}
