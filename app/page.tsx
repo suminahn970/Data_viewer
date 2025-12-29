@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useState, useEffect, useCallback } from "react"
-import { Sparkles, Trash2, LayoutDashboard, FileBarChart2 } from "lucide-react"
+import { Sparkles, Trash2, LayoutDashboard, FileBarChart2, XCircle } from "lucide-react" // ⭐️ XCircle 아이콘 추가
 
 export default function DashboardPage() {
   const [isClient, setIsClient] = useState(false)
@@ -31,6 +31,9 @@ export default function DashboardPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isCleaning, setIsCleaning] = useState(false)
   const [filterValue, setFilterValue] = useState<string | null>(null)
+
+  // ⭐️ [신규] 필터 해제 핸들러
+  const clearFilter = () => setFilterValue(null);
 
   useEffect(() => {
     setIsClient(true)
@@ -67,9 +70,7 @@ export default function DashboardPage() {
     setSelectedAnalysis(null)
     setFilterValue(null)
     
-    // ⭐️ 전달받은 limit 인자가 있으면 그것을 최우선으로 사용 (상태 지연 방지)
     const finalLimit = limit || rowLimit
-    
     if (!targetColumn) setSelectedPreset(null)
 
     try {
@@ -130,7 +131,6 @@ export default function DashboardPage() {
     } finally { setIsCleaning(false) }
   }
 
-  // ⭐️ 샘플링 필터 즉시 반영 로직
   const handleRowLimitChange = async (value: string) => {
     setRowLimit(value)
     if (currentFile) {
@@ -146,7 +146,6 @@ export default function DashboardPage() {
       <main className="flex-1 overflow-auto bg-slate-50/50">
         <div className="mx-auto max-w-[1400px] px-12 py-10">
           <div className="space-y-10">
-            {/* 상단 헤더 */}
             <div className="flex justify-between items-end bg-white p-8 rounded-[32px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
                 <div className="flex-1">
                     <h1 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-3 tracking-tight">
@@ -185,7 +184,6 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-10 animate-in fade-in slide-in-from-bottom-3 duration-1000">
-                {/* ⭐️ 수평선 맞춤: items-stretch */}
                 <div className="grid gap-6 lg:grid-cols-[1fr_400px] items-stretch">
                   <DataCleaningSection data={uploadedData} result={result} />
                   <SmartInsightsPanel data={uploadedData} result={result} />
@@ -237,12 +235,34 @@ export default function DashboardPage() {
                 <KpiMetrics displayMetrics={displayMetrics} />
                 
                 {selectedAnalysis && (
-                  <div className="w-full min-h-[500px] bg-white p-10 rounded-[40px] shadow-[0_8px_40px_rgb(0,0,0,0.04)] animate-in zoom-in-95 duration-700">
-                    <VisualInsight selectedAnalysis={selectedAnalysis} headers={result.headers} previewRows={result.preview_rows} onElementClick={setFilterValue} activeFilter={filterValue} />
+                  <div className="w-full min-h-[500px] bg-white p-10 rounded-[40px] shadow-[0_8px_40px_rgb(0,0,0,0.04)] animate-in zoom-in-95 duration-700 space-y-6">
+                    {/* ⭐️ 필터 알림 배지 추가 */}
+                    {filterValue && (
+                        <div className="flex items-center gap-3 px-4 py-2 bg-primary/5 border border-primary/10 rounded-2xl animate-in slide-in-from-top-2">
+                            <span className="text-xs font-bold text-primary tracking-tight">Active Chart Filter:</span>
+                            <span className="px-3 py-1 bg-primary text-white text-[10px] font-bold rounded-full">
+                                {selectedAnalysis.column} = {filterValue}
+                            </span>
+                            <button onClick={clearFilter} className="ml-auto text-slate-400 hover:text-primary transition-colors">
+                                <XCircle className="w-5 h-5" />
+                            </button>
+                        </div>
+                    )}
+                    <VisualInsight 
+                        selectedAnalysis={selectedAnalysis} 
+                        headers={result.headers} 
+                        previewRows={result.preview_rows} 
+                        onElementClick={setFilterValue} 
+                        activeFilter={filterValue} 
+                    />
                   </div>
                 )}
                 <div className="bg-white rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-                    <DataTable result={result} filterColumn={selectedAnalysis?.column} filterValue={filterValue} />
+                    <DataTable 
+                        result={result} 
+                        filterColumn={selectedAnalysis?.column} 
+                        filterValue={filterValue} 
+                    />
                 </div>
               </div>
             )}
