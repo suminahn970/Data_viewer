@@ -34,13 +34,10 @@ export default function DashboardPage() {
   }, [])
 
   const analyzeFile = async (file: File, targetColumn?: string, limit?: string) => {
-    // ⭐️ 1. 분석 시작 시 기존 데이터와 선택 상태를 즉시 비워서 충돌 방지
+    // ⭐️ [보안책 1] 분석 시작 시 모든 결과물을 즉시 null로 만들어 DOM에서 제거합니다.
     setIsAnalyzing(true)
-    if (!targetColumn) {
-        setResult(null)
-        setSelectedAnalysis(null)
-        setSelectedPreset(null)
-    }
+    setResult(null) 
+    setSelectedAnalysis(null)
 
     try {
       const formData = new FormData()
@@ -56,8 +53,6 @@ export default function DashboardPage() {
       if (!response.ok) throw new Error("Analysis failed")
 
       const data = await response.json()
-      
-      // ⭐️ 2. 데이터를 한 번에 세팅
       setDisplayMetrics(data.display_metrics || [])
       setResult(data.result)
       if (data.analysis_presets) setAnalysisPresets(data.analysis_presets)
@@ -66,11 +61,13 @@ export default function DashboardPage() {
         setSelectedPreset(targetColumn)
         const preset = data.analysis_presets?.find((p: any) => p.column === targetColumn)
         setSelectedAnalysis(preset || null)
+      } else {
+        setSelectedPreset(null)
       }
     } catch (error) {
       console.error("Error:", error)
-      alert("분석 중 오류가 발생했습니다.")
     } finally {
+      // ⭐️ [보안책 2] 모든 데이터가 준비된 후에만 다시 화면을 그립니다.
       setIsAnalyzing(false)
     }
   }
@@ -95,66 +92,64 @@ export default function DashboardPage() {
               onFileSelected={(file) => { setCurrentFile(file); analyzeFile(file); }} 
             />
 
-            {/* 분석 중일 때는 아래 콘텐츠를 그리지 않음으로써 DOM 에러 방지 */}
             {isAnalyzing ? (
-              <div className="text-center py-20 text-gray-400 animate-pulse font-medium">
-                데이터 분석 및 그래프 생성 중...
+              <div className="text-center py-20 text-gray-400 animate-pulse">
+                새로운 데이터를 분석하고 그래프를 생성 중입니다...
               </div>
-            ) : result && (
-              <>
-                <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
-                  <DataCleaningSection data={uploadedData} result={result} />
-                  <SmartInsightsPanel data={uploadedData} result={result} />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex flex-wrap gap-2">
-                    {analysisPresets.map((preset: any) => (
-                      <Button
-                        key={preset.column}
-                        variant={selectedPreset === preset.column ? "default" : "outline"}
-                        onClick={() => {
-                          if (selectedPreset === preset.column) {
-                            setSelectedPreset(null)
-                            setSelectedAnalysis(null)
-                          } else {
-                            // 버튼 클릭 시 즉시 재분석 요청
-                            analyzeFile(currentFile!, preset.column)
-                          }
-                        }}
-                      >
-                        {preset.label}
-                      </Button>
-                    ))}
+            ) : (
+              // ⭐️ [보안책 3] 데이터가 있을 때만 렌더링 영역을 활성화합니다.
+              result && (
+                <div className="space-y-8 animate-in fade-in duration-500">
+                  <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
+                    <DataCleaningSection data={uploadedData} result={result} />
+                    <SmartInsightsPanel data={uploadedData} result={result} />
                   </div>
-                  <Select value={rowLimit} onValueChange={handleRowLimitChange}>
-                    <SelectTrigger className="w-[140px] ml-auto">
-                      <SelectValue placeholder="샘플 개수" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10개 샘플</SelectItem>
-                      <SelectItem value="50">50개</SelectItem>
-                      <SelectItem value="100">100개</SelectItem>
-                      <SelectItem value="all">전체 데이터</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
 
-                <KpiMetrics displayMetrics={displayMetrics} />
-                
-                {/* ⭐️ 그래프 컴포넌트: 데이터가 있고 분석 중이 아닐 때만 렌더링 */}
-                {selectedAnalysis && result && (
-                  <div key={`${selectedPreset}-${rowLimit}`} className="w-full">
-                    <VisualInsight
-                      selectedAnalysis={selectedAnalysis}
-                      headers={result.headers}
-                      previewRows={result.preview_rows}
-                    />
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex flex-wrap gap-2">
+                      {analysisPresets.map((preset: any) => (
+                        <Button
+                          key={preset.column}
+                          variant={selectedPreset === preset.column ? "default" : "outline"}
+                          onClick={() => {
+                            if (selectedPreset !== preset.column) {
+                              analyzeFile(currentFile!, preset.column)
+                            }
+                          }}
+                        >
+                          {preset.label}
+                        </Button>
+                      ))}
+                    </div>
+                    <Select value={rowLimit} onValueChange={handleRowLimitChange}>
+                      <SelectTrigger className="w-[140px] ml-auto">
+                        <SelectValue placeholder="샘플 개수" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10개 샘플</SelectItem>
+                        <SelectItem value="50">50개</SelectItem>
+                        <SelectItem value="100">100개</SelectItem>
+                        <SelectItem value="all">전체 데이터</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                )}
-                
-                <DataTable result={result} />
-              </>
+
+                  <KpiMetrics displayMetrics={displayMetrics} />
+                  
+                  {/* ⭐️ [보안책 4] 그래프 컴포넌트가 바뀔 때마다 완전히 새로 그립니다. */}
+                  {selectedAnalysis && (
+                    <div key={`${selectedPreset}-${rowLimit}`} className="w-full">
+                      <VisualInsight
+                        selectedAnalysis={selectedAnalysis}
+                        headers={result.headers}
+                        previewRows={result.preview_rows}
+                      />
+                    </div>
+                  )}
+                  
+                  <DataTable result={result} />
+                </div>
+              )
             )}
           </div>
         </div>
