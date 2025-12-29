@@ -75,7 +75,7 @@ export default function DashboardPage() {
       }
       formData.append("row_limit", limit || rowLimit)
 
-      const response = await fetch("http://localhost:8000/analyze", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://data-viewer-zyxg.onrender.com'}/analyze`, {
         method: "POST",
         body: formData,
       })
