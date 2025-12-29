@@ -15,9 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useState, useCallback } from "react"
+import { useState, useEffect } from "react"
 
 export default function DashboardPage() {
+  const [isClient, setIsClient] = useState(false)
   const [uploadedData, setUploadedData] = useState<any>(null)
   const [displayMetrics, setDisplayMetrics] = useState([])
   const [result, setResult] = useState<any>(null)
@@ -28,15 +29,13 @@ export default function DashboardPage() {
   const [rowLimit, setRowLimit] = useState("10")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
-  // 분석 함수를 useCallback으로 감싸서 안정성을 높입니다.
-  const analyzeFile = useCallback(async (file: File, targetColumn?: string, limit?: string) => {
-    setIsAnalyzing(true)
-    // ⭐️ 중요: 새로운 데이터를 가져오기 전에 이전 분석 결과와 프리셋을 초기화하여 React 충돌을 방지합니다.
-    if (!targetColumn) {
-        setResult(null);
-        setSelectedAnalysis(null);
-    }
+  // ⭐️ 하이드레이션 오류 방지를 위한 안전장치
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
+  const analyzeFile = async (file: File, targetColumn?: string, limit?: string) => {
+    setIsAnalyzing(true)
     try {
       const formData = new FormData()
       formData.append("file", file)
@@ -58,22 +57,24 @@ export default function DashboardPage() {
       if (targetColumn) {
         setSelectedPreset(targetColumn)
         const preset = data.analysis_presets?.find((p: any) => p.column === targetColumn)
-        if (preset) setSelectedAnalysis(preset)
+        setSelectedAnalysis(preset || null)
       }
     } catch (error) {
       console.error("Error:", error)
     } finally {
       setIsAnalyzing(false)
     }
-  }, [rowLimit])
+  }
 
   const handleRowLimitChange = async (value: string) => {
     setRowLimit(value)
     if (currentFile) {
-      // ⭐️ 즉시 새로운 리밋으로 분석 요청
       await analyzeFile(currentFile, selectedPreset || undefined, value)
     }
   }
+
+  // 아직 클라이언트가 준비 안 됐으면 빈 화면을 보여줍니다.
+  if (!isClient) return <div className="min-h-screen bg-white" />
 
   return (
     <div className="flex min-h-screen bg-white">
@@ -87,7 +88,7 @@ export default function DashboardPage() {
             />
 
             {isAnalyzing && (
-              <div className="text-center py-8 animate-pulse text-gray-500">데이터를 다시 분석하고 있습니다...</div>
+              <div className="text-center py-8 text-gray-400">분석 중입니다...</div>
             )}
 
             {!isAnalyzing && result && (
@@ -104,12 +105,12 @@ export default function DashboardPage() {
                         key={preset.column}
                         variant={selectedPreset === preset.column ? "default" : "outline"}
                         onClick={() => {
-                            if (selectedPreset === preset.column) {
-                                setSelectedPreset(null);
-                                setSelectedAnalysis(null);
-                            } else {
-                                analyzeFile(currentFile!, preset.column);
-                            }
+                          if (selectedPreset === preset.column) {
+                            setSelectedPreset(null)
+                            setSelectedAnalysis(null)
+                          } else {
+                            analyzeFile(currentFile!, preset.column)
+                          }
                         }}
                       >
                         {preset.label}
@@ -130,13 +131,18 @@ export default function DashboardPage() {
                 </div>
 
                 <KpiMetrics displayMetrics={displayMetrics} />
-                {selectedAnalysis && (
-                  <VisualInsight
-                    selectedAnalysis={selectedAnalysis}
-                    headers={result.headers}
-                    previewRows={result.preview_rows}
-                  />
+                
+                {/* ⭐️ 그래프 컴포넌트 호출 시 에러 방지 처리 */}
+                {selectedAnalysis && result && (
+                  <div key={selectedPreset}> {/* key를 주어 컴포넌트를 깨끗하게 다시 그립니다. */}
+                    <VisualInsight
+                      selectedAnalysis={selectedAnalysis}
+                      headers={result.headers}
+                      previewRows={result.preview_rows}
+                    />
+                  </div>
                 )}
+                
                 <DataTable result={result} />
               </>
             )}
