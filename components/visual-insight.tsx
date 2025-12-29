@@ -19,13 +19,13 @@ import {
   Legend,
 } from "recharts"
 import { useMemo, useEffect, useState } from "react"
-import { Sparkles } from "lucide-react" // ✨ 아이콘 추가
+import { Sparkles } from "lucide-react"
 
 interface AnalysisPreset {
   label: string
   column: string
   type: "distribution" | "statistics" | "status" | "correlation" | "outlier"
-  insight?: string // ⭐️ 백엔드에서 보낸 인사이트 문장
+  insight?: string  // ⭐️ 백엔드에서 보낸 문장을 명확히 정의
 }
 
 interface VisualInsightProps {
@@ -140,28 +140,65 @@ export function VisualInsight({
     }
   }
 
-  if (!mounted || !selectedAnalysis || !chartData || chartData.length === 0) return null
+  if (!mounted || !selectedAnalysis || !chartData) return null
 
-  const renderChart = () => {
-    return (
-      <div className="h-[400px] w-full">
+  return (
+    <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm transition-all duration-500 animate-in fade-in slide-in-from-bottom-4">
+      <div className="mb-6 flex flex-col gap-5">
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="text-xl font-bold text-foreground mb-1 tracking-tight">
+              {selectedAnalysis.label}
+            </h3>
+            <p className="text-sm text-muted-foreground font-medium">
+              분석 컬럼: <span className="text-primary">{selectedAnalysis.column}</span>
+            </p>
+          </div>
+          {activeFilter && (
+            <div className="bg-primary/10 text-primary text-xs px-3 py-1.5 rounded-full animate-pulse font-bold border border-primary/20">
+              필터링: {activeFilter}
+            </div>
+          )}
+        </div>
+
+        {/* ⭐️ 인사이트 카드: 존재 여부를 더 확실하게 체크 */}
+        {selectedAnalysis.insight ? (
+          <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-5 flex items-start gap-4 shadow-sm group hover:shadow-md transition-shadow">
+            <div className="mt-0.5 bg-blue-500/10 p-2 rounded-xl group-hover:scale-110 transition-transform">
+              <Sparkles className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-[11px] font-black text-blue-400 uppercase tracking-[0.2em]">AI Insights</p>
+              <p className="text-[15px] text-slate-800 leading-relaxed font-semibold">
+                {selectedAnalysis.insight}
+              </p>
+            </div>
+          </div>
+        ) : (
+          /* 디버깅용: 데이터가 없을 때만 조용히 숨김 (테스트 시에는 '분석 중...' 메시지로 확인 가능) */
+          <div className="h-0 opacity-0" />
+        )}
+      </div>
+
+      <div className="h-[400px] w-full mt-2">
         <ResponsiveContainer width="100%" height="100%">
+          {/* 차트 렌더링 로직 (기존과 동일하되 타입 안정성 유지) */}
           {selectedAnalysis.type === "correlation" ? (
             <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-              <XAxis type="number" dataKey="x" name="X축" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis type="number" dataKey="y" name="Y축" fontSize={12} tickLine={false} axisLine={false} />
+              <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+              <XAxis type="number" dataKey="x" name="X" fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis type="number" dataKey="y" name="Y" fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-              <Scatter name="관계 분석" data={chartData} fill="hsl(217, 91%, 60%)" fillOpacity={0.6} />
+              <Scatter data={chartData} fill="hsl(217, 91%, 60%)" fillOpacity={0.6} />
             </ScatterChart>
           ) : 
           selectedAnalysis.type === "outlier" ? (
             <BarChart data={chartData} onClick={handlePointClick}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.2} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
               <XAxis dataKey="name" hide />
               <YAxis fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip />
-              <Bar dataKey="value" radius={[4, 4, 0, 0]} cursor="pointer">
+              <Bar dataKey="value" radius={[6, 6, 0, 0]} cursor="pointer">
                 {chartData.map((entry: any, index: number) => (
                   <Cell 
                     key={`cell-${index}`} 
@@ -178,9 +215,9 @@ export function VisualInsight({
                 data={chartData}
                 cx="50%"
                 cy="50%"
-                innerRadius={selectedAnalysis.type === "status" ? 60 : 0}
-                outerRadius={120}
-                paddingAngle={5}
+                innerRadius={selectedAnalysis.type === "status" ? 70 : 0}
+                outerRadius={130}
+                paddingAngle={4}
                 dataKey="value"
                 onClick={handlePointClick}
                 cursor="pointer"
@@ -194,30 +231,15 @@ export function VisualInsight({
                 ))}
               </Pie>
               <Tooltip />
-              <Legend />
+              <Legend verticalAlign="bottom" height={36}/>
             </PieChart>
-          ) : selectedAnalysis.type === "statistics" ? (
-            <AreaChart data={chartData} onClick={handlePointClick}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.2} />
-              <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis fontSize={12} tickLine={false} axisLine={false} />
-              <Tooltip />
-              <Area 
-                type="monotone" 
-                dataKey="value" 
-                stroke={COLORS[0]} 
-                fill={COLORS[0]} 
-                fillOpacity={activeFilter ? 0.5 : 0.2} 
-                cursor="pointer"
-              />
-            </AreaChart>
           ) : (
             <BarChart data={chartData} onClick={handlePointClick}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.2} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
               <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip cursor={{ fill: 'transparent' }} />
-              <Bar dataKey="value" radius={[4, 4, 0, 0]} cursor="pointer">
+              <Bar dataKey="value" radius={[6, 6, 0, 0]} cursor="pointer">
                 {chartData.map((entry: any, index: number) => (
                   <Cell 
                     key={`cell-${index}`} 
@@ -230,47 +252,12 @@ export function VisualInsight({
           )}
         </ResponsiveContainer>
       </div>
-    )
-  }
-
-  return (
-    <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm transition-all duration-500 animate-in fade-in slide-in-from-bottom-4">
-      <div className="mb-6 flex flex-col gap-4">
-        <div className="flex justify-between items-start">
-          <div>
-            <h3 className="text-lg font-semibold text-foreground mb-1">{selectedAnalysis.label}</h3>
-            <p className="text-sm text-muted-foreground font-medium italic underline underline-offset-4 decoration-primary/30">
-              분석 대상: {selectedAnalysis.column}
-            </p>
-          </div>
-          {activeFilter && (
-            <div className="bg-primary/10 text-primary text-xs px-3 py-1 rounded-full animate-bounce font-semibold">
-              필터 적용 중: {activeFilter}
-            </div>
-          )}
-        </div>
-
-        {/* ⭐️ [신규] 인사이트 문장화 카드 영역 */}
-        {selectedAnalysis.insight && (
-          <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-4 flex items-start gap-3 shadow-inner">
-            <div className="mt-1 bg-primary/20 p-1.5 rounded-lg">
-              <Sparkles className="w-4 h-4 text-primary" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">AI 자동 통찰</p>
-              <p className="text-sm text-slate-700 leading-relaxed font-medium">
-                {selectedAnalysis.insight}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div>{renderChart()}</div>
       
-      <p className="text-[10px] text-muted-foreground mt-6 text-center italic opacity-70">
-        * 그래프를 클릭하여 상세 데이터를 필터링해 보세요.
-      </p>
+      <div className="mt-8 pt-6 border-t border-slate-50 flex justify-center">
+        <p className="text-[11px] text-muted-foreground font-medium bg-slate-50 px-4 py-1.5 rounded-full">
+           그래프 요소를 클릭하여 표 데이터를 상세 필터링할 수 있습니다.
+        </p>
+      </div>
     </Card>
   )
 }
