@@ -12,24 +12,28 @@ import {
   CartesianGrid,
   AreaChart,
   Area,
-  ScatterChart, // ⭐️ 추가: 상관관계 분석용
-  Scatter,      // ⭐️ 추가: 상관관계 분석용
+  ScatterChart,
+  Scatter,
   ResponsiveContainer,
   Tooltip,
   Legend,
 } from "recharts"
 import { useMemo, useEffect, useState } from "react"
+import { Sparkles } from "lucide-react" // ✨ 아이콘 추가
 
 interface AnalysisPreset {
   label: string
   column: string
-  type: "distribution" | "statistics" | "status" | "correlation" | "outlier" // ⭐️ 타입 확장
+  type: "distribution" | "statistics" | "status" | "correlation" | "outlier"
+  insight?: string // ⭐️ 백엔드에서 보낸 인사이트 문장
 }
 
 interface VisualInsightProps {
   selectedAnalysis: AnalysisPreset | null
   headers: string[]
   previewRows: (string | number)[][]
+  onElementClick?: (value: string | null) => void
+  activeFilter?: string | null
 }
 
 const COLORS = [
@@ -38,7 +42,13 @@ const COLORS = [
   "hsl(24, 95%, 53%)", "hsl(280, 67%, 64%)",
 ]
 
-export function VisualInsight({ selectedAnalysis, headers, previewRows }: VisualInsightProps) {
+export function VisualInsight({ 
+  selectedAnalysis, 
+  headers, 
+  previewRows, 
+  onElementClick, 
+  activeFilter 
+}: VisualInsightProps) {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -49,7 +59,6 @@ export function VisualInsight({ selectedAnalysis, headers, previewRows }: Visual
   const chartData = useMemo(() => {
     if (!selectedAnalysis || !headers || !previewRows || previewRows.length === 0) return null
 
-    // ⭐️ [신규] 상관관계(Correlation) 데이터 처리 로직
     if (selectedAnalysis.type === "correlation") {
       const [col1, col2] = selectedAnalysis.column.split("__vs__")
       const idx1 = headers.indexOf(col1)
@@ -59,7 +68,7 @@ export function VisualInsight({ selectedAnalysis, headers, previewRows }: Visual
       return previewRows.map((row) => ({
         x: typeof row[idx1] === "number" ? row[idx1] : parseFloat(String(row[idx1])),
         y: typeof row[idx2] === "number" ? row[idx2] : parseFloat(String(row[idx2])),
-      })).filter(d => !isNaN(d.x) && !isNaN(d.y)).slice(0, 300) // 성능을 위해 300개 제한
+      })).filter(d => !isNaN(d.x) && !isNaN(d.y)).slice(0, 300)
     }
 
     const columnIndex = headers.indexOf(selectedAnalysis.column)
@@ -71,17 +80,15 @@ export function VisualInsight({ selectedAnalysis, headers, previewRows }: Visual
 
     if (columnData.length === 0) return null
 
-    // ⭐️ [신규] 이상치(Outlier) 데이터 처리 로직
     if (selectedAnalysis.type === "outlier") {
       const nums = columnData.map(v => parseFloat(String(v))).filter(v => !isNaN(v))
       if (nums.length === 0) return null
       const avg = nums.reduce((a, b) => a + b, 0) / nums.length
-      // 평균에서 50% 이상 차이나면 임시 이상치로 간주 (시각적 강조용)
       return nums.map((v, i) => ({
-        name: i,
+        name: String(v),
         value: v,
         isOutlier: Math.abs(v - avg) > avg * 0.5
-      })).slice(0, 50) // 바 차트 가독성을 위해 50개 제한
+      })).slice(0, 50)
     }
 
     try {
@@ -123,13 +130,22 @@ export function VisualInsight({ selectedAnalysis, headers, previewRows }: Visual
     return null
   }, [selectedAnalysis, headers, previewRows])
 
+  const handlePointClick = (data: any) => {
+    if (!onElementClick) return
+    const clickedValue = data.name || data.activeLabel || data.payload?.name
+    if (clickedValue === activeFilter) {
+      onElementClick(null)
+    } else {
+      onElementClick(clickedValue)
+    }
+  }
+
   if (!mounted || !selectedAnalysis || !chartData || chartData.length === 0) return null
 
   const renderChart = () => {
     return (
       <div className="h-[400px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          {/* 상관관계 분석: 산점도 */}
           {selectedAnalysis.type === "correlation" ? (
             <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
@@ -139,21 +155,23 @@ export function VisualInsight({ selectedAnalysis, headers, previewRows }: Visual
               <Scatter name="관계 분석" data={chartData} fill="hsl(217, 91%, 60%)" fillOpacity={0.6} />
             </ScatterChart>
           ) : 
-          /* 이상치 분석: 강조 바 차트 */
           selectedAnalysis.type === "outlier" ? (
-            <BarChart data={chartData}>
+            <BarChart data={chartData} onClick={handlePointClick}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.2} />
               <XAxis dataKey="name" hide />
               <YAxis fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip />
-              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+              <Bar dataKey="value" radius={[4, 4, 0, 0]} cursor="pointer">
                 {chartData.map((entry: any, index: number) => (
-                  <Cell key={`cell-${index}`} fill={entry.isOutlier ? "hsl(0, 72%, 51%)" : "hsl(217, 91%, 60%)"} />
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={entry.name === activeFilter ? "#000" : (entry.isOutlier ? "hsl(0, 72%, 51%)" : "hsl(217, 91%, 60%)")} 
+                    fillOpacity={activeFilter && entry.name !== activeFilter ? 0.3 : 1}
+                  />
                 ))}
               </Bar>
             </BarChart>
           ) :
-          /* 기존 차트 로직 */
           selectedAnalysis.type === "distribution" && chartData.length <= 5 ? (
             <PieChart>
               <Pie
@@ -164,29 +182,50 @@ export function VisualInsight({ selectedAnalysis, headers, previewRows }: Visual
                 outerRadius={120}
                 paddingAngle={5}
                 dataKey="value"
+                onClick={handlePointClick}
+                cursor="pointer"
               >
-                {chartData.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                {chartData.map((entry: any, index: number) => (
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={entry.name === activeFilter ? "#000" : COLORS[index % COLORS.length]} 
+                    fillOpacity={activeFilter && entry.name !== activeFilter ? 0.3 : 1}
+                  />
                 ))}
               </Pie>
               <Tooltip />
               <Legend />
             </PieChart>
           ) : selectedAnalysis.type === "statistics" ? (
-            <AreaChart data={chartData}>
+            <AreaChart data={chartData} onClick={handlePointClick}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.2} />
               <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip />
-              <Area type="monotone" dataKey="value" stroke={COLORS[0]} fill={COLORS[0]} fillOpacity={0.2} />
+              <Area 
+                type="monotone" 
+                dataKey="value" 
+                stroke={COLORS[0]} 
+                fill={COLORS[0]} 
+                fillOpacity={activeFilter ? 0.5 : 0.2} 
+                cursor="pointer"
+              />
             </AreaChart>
           ) : (
-            <BarChart data={chartData}>
+            <BarChart data={chartData} onClick={handlePointClick}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.2} />
               <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip cursor={{ fill: 'transparent' }} />
-              <Bar dataKey="value" fill={COLORS[1]} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="value" radius={[4, 4, 0, 0]} cursor="pointer">
+                {chartData.map((entry: any, index: number) => (
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={entry.name === activeFilter ? "#000" : COLORS[index % COLORS.length]} 
+                    fillOpacity={activeFilter && entry.name !== activeFilter ? 0.3 : 1}
+                  />
+                ))}
+              </Bar>
             </BarChart>
           )}
         </ResponsiveContainer>
@@ -196,11 +235,42 @@ export function VisualInsight({ selectedAnalysis, headers, previewRows }: Visual
 
   return (
     <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm transition-all duration-500 animate-in fade-in slide-in-from-bottom-4">
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold text-foreground mb-1">{selectedAnalysis.label}</h3>
-        <p className="text-sm text-muted-foreground">자동 통찰 탐지 결과</p>
+      <div className="mb-6 flex flex-col gap-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="text-lg font-semibold text-foreground mb-1">{selectedAnalysis.label}</h3>
+            <p className="text-sm text-muted-foreground font-medium italic underline underline-offset-4 decoration-primary/30">
+              분석 대상: {selectedAnalysis.column}
+            </p>
+          </div>
+          {activeFilter && (
+            <div className="bg-primary/10 text-primary text-xs px-3 py-1 rounded-full animate-bounce font-semibold">
+              필터 적용 중: {activeFilter}
+            </div>
+          )}
+        </div>
+
+        {/* ⭐️ [신규] 인사이트 문장화 카드 영역 */}
+        {selectedAnalysis.insight && (
+          <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-4 flex items-start gap-3 shadow-inner">
+            <div className="mt-1 bg-primary/20 p-1.5 rounded-lg">
+              <Sparkles className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">AI 자동 통찰</p>
+              <p className="text-sm text-slate-700 leading-relaxed font-medium">
+                {selectedAnalysis.insight}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
-      {renderChart()}
+
+      <div>{renderChart()}</div>
+      
+      <p className="text-[10px] text-muted-foreground mt-6 text-center italic opacity-70">
+        * 그래프를 클릭하여 상세 데이터를 필터링해 보세요.
+      </p>
     </Card>
   )
 }
