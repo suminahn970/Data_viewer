@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import io
+import numpy as np # ⭐️ 이상치 계산을 위해 추가
 
 app = FastAPI()
 
@@ -28,6 +29,34 @@ def translate_column_name(col_name: str) -> str:
     for key, value in COLUMN_TRANSLATIONS.items():
         if key in col_lower: return value
     return col_name
+
+# ⭐️ 자동 인사이트 생성 함수 추가
+def generate_insight(analysis_type: str, col: str, df: pd.DataFrame) -> str:
+    try:
+        if analysis_type == "distribution":
+            top_val = df[col].value_counts().idxmax()
+            top_pct = (df[col].value_counts().max() / len(df)) * 100
+            return f"가장 비중이 높은 항목은 '{top_val}'이며, 전체의 {top_pct:.1f}%를 차지합니다."
+        
+        elif analysis_type == "statistics":
+            mean_val = df[col].mean()
+            max_val = df[col].max()
+            return f"해당 데이터의 평균값은 {mean_val:,.1f}이며, 최대 수치는 {max_val:,.1f}로 분석되었습니다."
+        
+        elif analysis_type == "correlation":
+            cols = col.split("__vs__")
+            corr = df[cols[0]].corr(df[cols[1]])
+            strength = "높은" if abs(corr) > 0.6 else "어느 정도의" if abs(corr) > 0.3 else "낮은"
+            direction = "양(+)" if corr > 0 else "음(-)"
+            return f"두 지표 사이에는 {strength} {direction}의 상관관계(r={corr:.2f})가 관찰됩니다."
+        
+        elif analysis_type == "outlier":
+            mean, std = df[col].mean(), df[col].std()
+            outlier_count = len(df[np.abs(df[col] - mean) > (2 * std)])
+            return f"평균에서 크게 벗어난 이상 데이터가 {outlier_count}건 발견되었습니다. 상세 확인이 필요합니다."
+    except Exception as e:
+        return f"데이터를 분석하는 중입니다."
+    return ""
 
 @app.post("/analyze")
 async def analyze_data(file: UploadFile = File(...), target_column: str = Form(None), row_limit: str = Form("10")):
@@ -58,43 +87,46 @@ async def analyze_data(file: UploadFile = File(...), target_column: str = Form(N
         })
     display_metrics.append({"label": "분석 데이터", "value": len(df), "unit": "건", "feature": None})
 
-    # 2. 버튼(프리셋) 생성 로직 - 지능형 탐색 추가
+    # 2. 버튼(프리셋) 생성 로직
     analysis_presets = []
     
-    # [기존] 범주형 분석
+    # 범주형 분석
     cat_cols = df.select_dtypes(include=['object']).columns.tolist()
     for col in cat_cols[:3]:
         analysis_presets.append({
             "label": f"{translate_column_name(col)} 분포 분석",
             "column": col,
-            "type": "distribution"
+            "type": "distribution",
+            "insight": generate_insight("distribution", col, df) # ⭐️ 추가
         })
 
-    # [기존] 수치형 분석
+    # 수치형 분석
     for col in numeric_columns[:2]:
         analysis_presets.append({
             "label": f"{translate_column_name(col)} 통계 분석",
             "column": col,
-            "type": "statistics"
+            "type": "statistics",
+            "insight": generate_insight("statistics", col, df) # ⭐️ 추가
         })
 
-    # ⭐️ [신규 1] 상관관계 분석 (Smart Discovery)
-    # 수치형 컬럼이 2개 이상일 때 두 변수 간의 관계 분석 버튼 자동 생성
+    # 상관관계 분석
     if len(numeric_columns) >= 2:
         col1, col2 = numeric_columns[0], numeric_columns[1]
+        combo_col = f"{col1}__vs__{col2}"
         analysis_presets.append({
             "label": f"{translate_column_name(col1)} vs {translate_column_name(col2)} 관계",
-            "column": f"{col1}__vs__{col2}", # 특수 구분자
-            "type": "correlation"
+            "column": combo_col,
+            "type": "correlation",
+            "insight": generate_insight("correlation", combo_col, df) # ⭐️ 추가
         })
 
-    # ⭐️ [신규 2] 이상치 탐지 (Smart Discovery)
-    # 데이터 중 유독 튀는 값이 있는 컬럼을 찾아 '이상치 분석' 버튼 생성
-    for col in numeric_columns[:1]: # 우선 가장 중요한 첫 번째 숫자 컬럼 대상
+    # 이상치 탐지
+    for col in numeric_columns[:1]:
         analysis_presets.append({
             "label": f"{translate_column_name(col)} 이상치 탐지",
             "column": col,
-            "type": "outlier"
+            "type": "outlier",
+            "insight": generate_insight("outlier", col, df) # ⭐️ 추가
         })
 
     # 3. 데이터 미리보기
