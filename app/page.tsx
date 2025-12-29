@@ -29,13 +29,19 @@ export default function DashboardPage() {
   const [rowLimit, setRowLimit] = useState("10")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
-  // ⭐️ 하이드레이션 오류 방지를 위한 안전장치
   useEffect(() => {
     setIsClient(true)
   }, [])
 
   const analyzeFile = async (file: File, targetColumn?: string, limit?: string) => {
+    // ⭐️ 1. 분석 시작 시 기존 데이터와 선택 상태를 즉시 비워서 충돌 방지
     setIsAnalyzing(true)
+    if (!targetColumn) {
+        setResult(null)
+        setSelectedAnalysis(null)
+        setSelectedPreset(null)
+    }
+
     try {
       const formData = new FormData()
       formData.append("file", file)
@@ -50,6 +56,8 @@ export default function DashboardPage() {
       if (!response.ok) throw new Error("Analysis failed")
 
       const data = await response.json()
+      
+      // ⭐️ 2. 데이터를 한 번에 세팅
       setDisplayMetrics(data.display_metrics || [])
       setResult(data.result)
       if (data.analysis_presets) setAnalysisPresets(data.analysis_presets)
@@ -61,6 +69,7 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error("Error:", error)
+      alert("분석 중 오류가 발생했습니다.")
     } finally {
       setIsAnalyzing(false)
     }
@@ -73,7 +82,6 @@ export default function DashboardPage() {
     }
   }
 
-  // 아직 클라이언트가 준비 안 됐으면 빈 화면을 보여줍니다.
   if (!isClient) return <div className="min-h-screen bg-white" />
 
   return (
@@ -87,11 +95,12 @@ export default function DashboardPage() {
               onFileSelected={(file) => { setCurrentFile(file); analyzeFile(file); }} 
             />
 
-            {isAnalyzing && (
-              <div className="text-center py-8 text-gray-400">분석 중입니다...</div>
-            )}
-
-            {!isAnalyzing && result && (
+            {/* 분석 중일 때는 아래 콘텐츠를 그리지 않음으로써 DOM 에러 방지 */}
+            {isAnalyzing ? (
+              <div className="text-center py-20 text-gray-400 animate-pulse font-medium">
+                데이터 분석 및 그래프 생성 중...
+              </div>
+            ) : result && (
               <>
                 <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
                   <DataCleaningSection data={uploadedData} result={result} />
@@ -109,6 +118,7 @@ export default function DashboardPage() {
                             setSelectedPreset(null)
                             setSelectedAnalysis(null)
                           } else {
+                            // 버튼 클릭 시 즉시 재분석 요청
                             analyzeFile(currentFile!, preset.column)
                           }
                         }}
@@ -132,9 +142,9 @@ export default function DashboardPage() {
 
                 <KpiMetrics displayMetrics={displayMetrics} />
                 
-                {/* ⭐️ 그래프 컴포넌트 호출 시 에러 방지 처리 */}
+                {/* ⭐️ 그래프 컴포넌트: 데이터가 있고 분석 중이 아닐 때만 렌더링 */}
                 {selectedAnalysis && result && (
-                  <div key={selectedPreset}> {/* key를 주어 컴포넌트를 깨끗하게 다시 그립니다. */}
+                  <div key={`${selectedPreset}-${rowLimit}`} className="w-full">
                     <VisualInsight
                       selectedAnalysis={selectedAnalysis}
                       headers={result.headers}
