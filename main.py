@@ -54,18 +54,15 @@ def generate_insight(analysis_type: str, col: str, df: pd.DataFrame) -> str:
         return "데이터를 분석하는 중입니다."
     return ""
 
-# ⭐️ [신규 추가] 스마트 데이터 정제 엔드포인트
 @app.post("/clean")
 async def clean_data(file: UploadFile = File(...)):
     contents = await file.read()
     df = pd.read_csv(io.BytesIO(contents))
     
-    # 1. 중복 제거
     original_len = len(df)
     df = df.drop_duplicates()
     removed_duplicates = original_len - len(df)
     
-    # 2. 결측치 처리 (숫자는 평균, 문자는 'Unknown')
     fixed_missing = 0
     for col in df.columns:
         null_count = df[col].isnull().sum()
@@ -76,7 +73,6 @@ async def clean_data(file: UploadFile = File(...)):
             else:
                 df[col] = df[col].fillna("Unknown")
             
-    # 정제된 데이터를 다시 CSV 파일 형태로 전송하기 위해 변환
     output = io.StringIO()
     df.to_csv(output, index=False)
     
@@ -84,7 +80,7 @@ async def clean_data(file: UploadFile = File(...)):
         "message": "데이터 정제가 완료되었습니다.",
         "removed_duplicates": int(removed_duplicates),
         "fixed_missing": int(fixed_missing),
-        "cleaned_data": output.getvalue() # 정제된 CSV 데이터 자체를 리턴
+        "cleaned_data": output.getvalue()
     }
 
 @app.post("/analyze")
@@ -101,14 +97,17 @@ async def analyze_data(file: UploadFile = File(...), target_column: str = Form(N
         except:
             df = df.head(10)
 
+    # ⭐️ 지표 계산 로직 변경 (Sum -> Mean)
     numeric_columns = df.select_dtypes(include=['number']).columns.tolist()
     display_metrics = []
     for col in numeric_columns[:4]:
         col_translated = translate_column_name(col)
-        sum_val = float(df[col].sum())
+        # ⭐️ 평균값(mean) 계산 후 반올림
+        avg_val = float(df[col].mean())
+        
         display_metrics.append({
-            "label": f"{col_translated} (합계)",
-            "value": int(sum_val) if sum_val.is_integer() else round(sum_val, 2),
+            "label": f"{col_translated} (평균)",
+            "value": round(avg_val, 2), # 소수점 둘째 자리까지
             "unit": "",
             "feature": col
         })
