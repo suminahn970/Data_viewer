@@ -73,6 +73,7 @@ export default function DashboardPage() {
       if (targetColumn) {
         formData.append("target_column", targetColumn)
       }
+      // ⭐️ 수정: 매개변수로 들어온 limit이 있으면 그것을 쓰고, 없으면 상태값(rowLimit)을 씁니다.
       formData.append("row_limit", limit || rowLimit)
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://data-viewer-zyxg.onrender.com'}/analyze`, {
@@ -89,19 +90,18 @@ export default function DashboardPage() {
       setResult(analysisData.result)
       setMainFeature(analysisData.main_feature || null)
       setAnalyzedRows(analysisData.analyzed_rows || 0)
-      // analysis_presets는 첫 로드 시에만 설정 (이후에는 유지)
+      
       if (analysisData.analysis_presets && analysisData.analysis_presets.length > 0) {
         setAnalysisPresets(analysisData.analysis_presets)
       }
+      
       if (targetColumn) {
         setSelectedPreset(targetColumn)
-        // 선택된 preset 찾기
         const preset = analysisData.analysis_presets?.find((p: AnalysisPreset) => p.column === targetColumn)
         if (preset) {
           setSelectedAnalysis(preset)
         }
       } else if (!targetColumn && !selectedPreset) {
-        // 초기 로드 시 선택 해제
         setSelectedPreset(null)
         setSelectedAnalysis(null)
       }
@@ -115,21 +115,21 @@ export default function DashboardPage() {
   const handlePresetClick = async (preset: AnalysisPreset) => {
     if (!currentFile) return
     
-    // 이미 같은 프리셋이 선택되어 있으면 차트만 토글, 아니면 재분석
     if (selectedAnalysis?.column === preset.column) {
       setSelectedAnalysis(null)
       setSelectedPreset(null)
     } else {
       setSelectedAnalysis(preset)
       setSelectedPreset(preset.column)
-      // KPI 재계산을 위해 백엔드 호출
       await analyzeFile(currentFile, preset.column, rowLimit)
     }
   }
 
+  // ⭐️ 핵심 수정 부분: 비동기 상태 업데이트 문제를 해결하기 위해 value를 직접 넘깁니다.
   const handleRowLimitChange = async (value: string) => {
     setRowLimit(value)
     if (currentFile) {
+      // ⭐️ analyzeFile의 세 번째 인자로 value를 직접 전달하여 즉시 반영되게 합니다.
       await analyzeFile(currentFile, selectedPreset || undefined, value)
     }
   }
@@ -144,7 +144,7 @@ export default function DashboardPage() {
             <FileUploadZone onDataUploaded={handleDataUploaded} onFileSelected={handleFileSelected} />
 
             {isAnalyzing && (
-              <div className="text-center text-[#86868b] py-8">Analyzing data...</div>
+              <div className="text-center text-[#86868b] py-8 font-medium">데이터 분석 중...</div>
             )}
 
             {uploadedData && (
@@ -175,7 +175,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Select value={rowLimit} onValueChange={handleRowLimitChange}>
-                    <SelectTrigger size="sm" className="w-[140px]">
+                    <SelectTrigger className="w-[140px] h-9 text-sm">
                       <SelectValue placeholder="데이터 양 선택" />
                     </SelectTrigger>
                     <SelectContent>
