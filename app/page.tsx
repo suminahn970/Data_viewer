@@ -29,15 +29,13 @@ export default function DashboardPage() {
   const [rowLimit, setRowLimit] = useState("10")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
-  // 1. 하이드레이션 오류 방지
   useEffect(() => {
     setIsClient(true)
   }, [])
 
-  // 2. 분석 함수 최적화 (useCallback으로 메모이제이션)
   const analyzeFile = useCallback(async (file: File, targetColumn?: string, limit?: string) => {
-    // 분석 시작 시 이전 상태를 확실히 초기화하여 DOM 충돌 방지
     setIsAnalyzing(true)
+    // 분석 시작 시 즉시 이전 상태를 제거하여 DOM 충돌 방지
     setResult(null) 
     setSelectedAnalysis(null)
     if (!targetColumn) setSelectedPreset(null)
@@ -56,8 +54,6 @@ export default function DashboardPage() {
       if (!response.ok) throw new Error("Analysis failed")
 
       const data = await response.json()
-      
-      // 상태 업데이트를 한 번에 처리하여 불필요한 리렌더링 방지
       setDisplayMetrics(data.display_metrics || [])
       setResult(data.result)
       if (data.analysis_presets) setAnalysisPresets(data.analysis_presets)
@@ -97,15 +93,14 @@ export default function DashboardPage() {
               }} 
             />
 
-            {/* 분석 중일 때 보여줄 UI: 하단 영역 전체를 비워서 DOM 충돌 차단 */}
             {isAnalyzing ? (
               <div className="flex flex-col items-center justify-center py-20 space-y-4">
                 <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                <p className="text-gray-400 animate-pulse">새로운 데이터를 분석하고 그래프를 생성 중입니다...</p>
+                <p className="text-gray-400 animate-pulse font-medium">지능형 인사이트를 분석 중입니다...</p>
               </div>
             ) : (
               result && (
-                <div key={`dashboard-content-${selectedPreset}`} className="space-y-8 animate-in fade-in duration-500">
+                <div key={`dashboard-root-${selectedPreset}`} className="space-y-8 animate-in fade-in duration-700">
                   <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
                     <DataCleaningSection data={uploadedData} result={result} />
                     <SmartInsightsPanel data={uploadedData} result={result} />
@@ -115,14 +110,13 @@ export default function DashboardPage() {
                     <div className="flex flex-wrap gap-2">
                       {analysisPresets.map((preset: any) => (
                         <Button
-                          key={`btn-${preset.column}`}
+                          key={`preset-${preset.column}`}
                           variant={selectedPreset === preset.column ? "default" : "outline"}
                           disabled={isAnalyzing}
                           onClick={() => {
                             if (selectedPreset !== preset.column) {
                               analyzeFile(currentFile!, preset.column)
                             } else {
-                              // 같은 버튼 누르면 선택 해제
                               setSelectedPreset(null)
                               setSelectedAnalysis(null)
                             }
@@ -135,8 +129,8 @@ export default function DashboardPage() {
                     
                     <div className="ml-auto">
                       <Select value={rowLimit} onValueChange={handleRowLimitChange} disabled={isAnalyzing}>
-                        <SelectTrigger className="w-[140px]">
-                          <SelectValue placeholder="샘플 개수" />
+                        <SelectTrigger className="w-[140px] h-9 text-xs">
+                          <SelectValue placeholder="데이터 범위" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="10">10개 샘플</SelectItem>
@@ -150,11 +144,10 @@ export default function DashboardPage() {
 
                   <KpiMetrics displayMetrics={displayMetrics} />
                   
-                  {/* 그래프 컴포넌트: key를 구체화하여 데이터 변경 시 완전 재렌더링 유도 */}
                   {selectedAnalysis && result && (
                     <div 
-                      key={`visual-container-${selectedPreset}-${result.preview_rows.length}`} 
-                      className="w-full min-h-[400px] transition-all"
+                      key={`chart-area-${selectedPreset}-${result.preview_rows.length}`} 
+                      className="w-full min-h-[450px]"
                     >
                       <VisualInsight
                         selectedAnalysis={selectedAnalysis}
