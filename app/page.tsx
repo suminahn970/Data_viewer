@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useState, useEffect, useCallback } from "react"
-import { Sparkles, Trash2 } from "lucide-react"
+import { Sparkles, Trash2, Download } from "lucide-react" // 📥 다운로드 아이콘 추가
 
 export default function DashboardPage() {
   const [isClient, setIsClient] = useState(false)
@@ -32,7 +32,7 @@ export default function DashboardPage() {
   const [isCleaning, setIsCleaning] = useState(false)
   const [filterValue, setFilterValue] = useState<string | null>(null)
 
-  // ⭐️ [보강] 로컬 스토리지 안전 복구 로직
+  // ⭐️ [보강] 로컬 스토리지 안전 복구 및 파일 객체 재생성
   useEffect(() => {
     setIsClient(true)
     try {
@@ -40,23 +40,31 @@ export default function DashboardPage() {
       const savedResult = localStorage.getItem('dash_result')
       const savedPresets = localStorage.getItem('dash_presets')
       const savedFileName = localStorage.getItem('dash_filename')
+      const savedRawCsv = localStorage.getItem('dash_raw_csv') // 원본 데이터 복구용
 
-      // 데이터가 모두 존재하고 'undefined' 문자열이 아닐 때만 파싱
       if (savedMetrics && savedResult && savedPresets && savedMetrics !== "undefined") {
         setDisplayMetrics(JSON.parse(savedMetrics))
         setResult(JSON.parse(savedResult))
         setAnalysisPresets(JSON.parse(savedPresets))
-        if (savedFileName) setUploadedData({ name: savedFileName })
-        console.log("🚀 분석 데이터를 안전하게 복구했습니다.")
+        
+        if (savedFileName) {
+          setUploadedData({ name: savedFileName })
+          // ⭐️ 저장된 CSV 텍스트가 있다면 File 객체로 다시 변환 (정제 기능을 위해)
+          if (savedRawCsv) {
+            const recoveredFile = new File([savedRawCsv], savedFileName, { type: "text/csv" })
+            setCurrentFile(recoveredFile)
+          }
+        }
+        console.log("🚀 분석 데이터 및 파일 객체를 완벽히 복구했습니다.")
       }
     } catch (e) {
-      console.error("복구 중 데이터 충돌 발생. 저장소를 초기화합니다.")
-      localStorage.clear() // 데이터가 깨져있으면 지워서 에러 방지
+      console.error("복구 실패:", e)
+      localStorage.clear()
     }
   }, [])
 
   const handleReset = () => {
-    if (confirm("모든 분석 데이터를 삭제하고 초기화할까요?")) {
+    if (confirm("모든 데이터를 삭제할까요?")) {
       localStorage.clear()
       window.location.reload()
     }
@@ -92,6 +100,13 @@ export default function DashboardPage() {
       localStorage.setItem('dash_result', JSON.stringify(data.result))
       localStorage.setItem('dash_presets', JSON.stringify(data.analysis_presets))
       localStorage.setItem('dash_filename', file.name)
+      
+      // ⭐️ 정제 기능을 위해 파일의 텍스트 내용도 저장 (Blob -> Text)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        if (e.target?.result) localStorage.setItem('dash_raw_csv', e.target.result as string)
+      }
+      reader.readAsText(file)
 
       if (targetColumn) {
         setSelectedPreset(targetColumn)
@@ -107,7 +122,7 @@ export default function DashboardPage() {
 
   const handleCleanData = async () => {
     if (!currentFile) {
-        alert("현재 세션에 파일 객체가 없습니다. 파일을 다시 업로드해 주세요.")
+        alert("복구된 파일이 없습니다. 파일을 다시 업로드해 주세요.")
         return
     }
     setIsCleaning(true)
@@ -121,12 +136,23 @@ export default function DashboardPage() {
       if (!response.ok) throw new Error("Cleaning failed")
       const data = await response.json()
       alert(`✨ 정제 완료!\n- 중복: ${data.removed_duplicates}건 제거\n- 결측치: ${data.fixed_missing}건 보정`)
+      
       const cleanedFile = new File([data.cleaned_data], currentFile.name, { type: "text/csv" })
       setCurrentFile(cleanedFile)
       analyzeFile(cleanedFile)
     } catch (error) {
       console.error("정제 오류:", error)
     } finally { setIsCleaning(false) }
+  }
+
+  // ⭐️ [신규] 정제된 데이터 다운로드 기능
+  const handleDownload = () => {
+    if (!currentFile) return
+    const url = window.URL.createObjectURL(currentFile)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `cleaned_${currentFile.name}`
+    a.click()
   }
 
   const handleRowLimitChange = async (value: string) => {
@@ -149,18 +175,26 @@ export default function DashboardPage() {
                         onFileSelected={(file) => { setCurrentFile(file); analyzeFile(file); }} 
                     />
                 </div>
-                {result && (
-                    <Button variant="ghost" size="sm" onClick={handleReset} className="text-muted-foreground hover:text-destructive ml-4 mb-2">
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        기록 삭제
-                    </Button>
-                )}
+                <div className="flex gap-2 mb-2">
+                    {result && (
+                        <>
+                            <Button variant="outline" size="sm" onClick={handleDownload} className="text-gray-600">
+                                <Download className="w-4 h-4 mr-2" />
+                                CSV 결과 저장
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={handleReset} className="text-muted-foreground hover:text-destructive">
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                기록 삭제
+                            </Button>
+                        </>
+                    )}
+                </div>
             </div>
 
             {isAnalyzing || isCleaning ? (
               <div className="flex flex-col items-center justify-center py-20 space-y-4">
                 <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                <p className="text-gray-400 animate-pulse font-medium">처리 중...</p>
+                <p className="text-gray-400 animate-pulse font-medium">데이터 처리 중...</p>
               </div>
             ) : (
               result && (
@@ -197,16 +231,6 @@ export default function DashboardPage() {
                           {preset.label}
                         </Button>
                       ))}
-                    </div>
-                    <div className="ml-auto">
-                      <Select value={rowLimit} onValueChange={handleRowLimitChange}>
-                        <SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="10">10개 샘플</SelectItem>
-                          <SelectItem value="50">50개</SelectItem>
-                          <SelectItem value="all">전체 데이터</SelectItem>
-                        </SelectContent>
-                      </Select>
                     </div>
                   </div>
 
