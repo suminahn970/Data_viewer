@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 
 export default function DashboardPage() {
   const [isClient, setIsClient] = useState(false)
@@ -29,15 +29,18 @@ export default function DashboardPage() {
   const [rowLimit, setRowLimit] = useState("10")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
+  // 1. 하이드레이션 오류 방지
   useEffect(() => {
     setIsClient(true)
   }, [])
 
-  const analyzeFile = async (file: File, targetColumn?: string, limit?: string) => {
-    // ⭐️ [보안책 1] 분석 시작 시 모든 결과물을 즉시 null로 만들어 DOM에서 제거합니다.
+  // 2. 분석 함수 최적화 (useCallback으로 메모이제이션)
+  const analyzeFile = useCallback(async (file: File, targetColumn?: string, limit?: string) => {
+    // 분석 시작 시 이전 상태를 확실히 초기화하여 DOM 충돌 방지
     setIsAnalyzing(true)
     setResult(null) 
     setSelectedAnalysis(null)
+    if (!targetColumn) setSelectedPreset(null)
 
     try {
       const formData = new FormData()
@@ -53,6 +56,8 @@ export default function DashboardPage() {
       if (!response.ok) throw new Error("Analysis failed")
 
       const data = await response.json()
+      
+      // 상태 업데이트를 한 번에 처리하여 불필요한 리렌더링 방지
       setDisplayMetrics(data.display_metrics || [])
       setResult(data.result)
       if (data.analysis_presets) setAnalysisPresets(data.analysis_presets)
@@ -61,16 +66,13 @@ export default function DashboardPage() {
         setSelectedPreset(targetColumn)
         const preset = data.analysis_presets?.find((p: any) => p.column === targetColumn)
         setSelectedAnalysis(preset || null)
-      } else {
-        setSelectedPreset(null)
       }
     } catch (error) {
-      console.error("Error:", error)
+      console.error("분석 오류:", error)
     } finally {
-      // ⭐️ [보안책 2] 모든 데이터가 준비된 후에만 다시 화면을 그립니다.
       setIsAnalyzing(false)
     }
-  }
+  }, [rowLimit])
 
   const handleRowLimitChange = async (value: string) => {
     setRowLimit(value)
@@ -89,17 +91,21 @@ export default function DashboardPage() {
           <div className="space-y-8">
             <FileUploadZone 
               onDataUploaded={setUploadedData} 
-              onFileSelected={(file) => { setCurrentFile(file); analyzeFile(file); }} 
+              onFileSelected={(file) => { 
+                setCurrentFile(file); 
+                analyzeFile(file); 
+              }} 
             />
 
+            {/* 분석 중일 때 보여줄 UI: 하단 영역 전체를 비워서 DOM 충돌 차단 */}
             {isAnalyzing ? (
-              <div className="text-center py-20 text-gray-400 animate-pulse">
-                새로운 데이터를 분석하고 그래프를 생성 중입니다...
+              <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                <p className="text-gray-400 animate-pulse">새로운 데이터를 분석하고 그래프를 생성 중입니다...</p>
               </div>
             ) : (
-              // ⭐️ [보안책 3] 데이터가 있을 때만 렌더링 영역을 활성화합니다.
               result && (
-                <div className="space-y-8 animate-in fade-in duration-500">
+                <div key={`dashboard-content-${selectedPreset}`} className="space-y-8 animate-in fade-in duration-500">
                   <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
                     <DataCleaningSection data={uploadedData} result={result} />
                     <SmartInsightsPanel data={uploadedData} result={result} />
@@ -109,11 +115,16 @@ export default function DashboardPage() {
                     <div className="flex flex-wrap gap-2">
                       {analysisPresets.map((preset: any) => (
                         <Button
-                          key={preset.column}
+                          key={`btn-${preset.column}`}
                           variant={selectedPreset === preset.column ? "default" : "outline"}
+                          disabled={isAnalyzing}
                           onClick={() => {
                             if (selectedPreset !== preset.column) {
                               analyzeFile(currentFile!, preset.column)
+                            } else {
+                              // 같은 버튼 누르면 선택 해제
+                              setSelectedPreset(null)
+                              setSelectedAnalysis(null)
                             }
                           }}
                         >
@@ -121,24 +132,30 @@ export default function DashboardPage() {
                         </Button>
                       ))}
                     </div>
-                    <Select value={rowLimit} onValueChange={handleRowLimitChange}>
-                      <SelectTrigger className="w-[140px] ml-auto">
-                        <SelectValue placeholder="샘플 개수" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="10">10개 샘플</SelectItem>
-                        <SelectItem value="50">50개</SelectItem>
-                        <SelectItem value="100">100개</SelectItem>
-                        <SelectItem value="all">전체 데이터</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    
+                    <div className="ml-auto">
+                      <Select value={rowLimit} onValueChange={handleRowLimitChange} disabled={isAnalyzing}>
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue placeholder="샘플 개수" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">10개 샘플</SelectItem>
+                          <SelectItem value="50">50개</SelectItem>
+                          <SelectItem value="100">100개</SelectItem>
+                          <SelectItem value="all">전체 데이터</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
 
                   <KpiMetrics displayMetrics={displayMetrics} />
                   
-                  {/* ⭐️ [보안책 4] 그래프 컴포넌트가 바뀔 때마다 완전히 새로 그립니다. */}
-                  {selectedAnalysis && (
-                    <div key={`${selectedPreset}-${rowLimit}`} className="w-full">
+                  {/* 그래프 컴포넌트: key를 구체화하여 데이터 변경 시 완전 재렌더링 유도 */}
+                  {selectedAnalysis && result && (
+                    <div 
+                      key={`visual-container-${selectedPreset}-${result.preview_rows.length}`} 
+                      className="w-full min-h-[400px] transition-all"
+                    >
                       <VisualInsight
                         selectedAnalysis={selectedAnalysis}
                         headers={result.headers}
