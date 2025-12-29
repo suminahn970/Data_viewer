@@ -23,16 +23,16 @@ export function SmartInsightsPanel({ data, result }: SmartInsightsPanelProps) {
 
     const results = []
     
-    // 1. 데이터 구조 검증
+    // 1. 데이터 구조 검증 (Data Structure Validated)
     const totalRows = result?.total_rows || data.rows.length
     results.push({
       type: "success",
-      title: "Data Structure Validated",
-      description: `${data.headers.length.toLocaleString()} columns, ${totalRows.toLocaleString()} rows detected`,
+      title: "데이터 구조 검증 완료",
+      description: `${data.headers.length.toLocaleString()}개의 열과 ${totalRows.toLocaleString()}개의 행이 감지되었습니다.`,
       details: null,
     })
 
-    // 2. 수치형 컬럼 감지
+    // 2. 수치형 컬럼 감지 (Numeric Columns Found)
     const numericColumns = data.headers.filter((header, index) => {
       const sample = data.rows.slice(0, 10).map((row) => row[index])
       return sample.every((val) => !isNaN(Number(val)) && val !== "")
@@ -41,13 +41,13 @@ export function SmartInsightsPanel({ data, result }: SmartInsightsPanelProps) {
     if (numericColumns.length > 0) {
       results.push({
         type: "info",
-        title: "Numeric Columns Found",
-        description: `${numericColumns.length.toLocaleString()} columns contain numeric data`,
+        title: "수치형 데이터 발견",
+        description: `${numericColumns.length.toLocaleString()}개의 열에서 통계 분석이 가능한 수치 데이터를 확인했습니다.`,
         details: numericColumns.join(", "),
       })
     }
 
-    // 3. 결측치 감지
+    // 3. 결측치 감지 (Missing Values detected)
     let totalMissing = 0
     data.headers.forEach((_, index) => {
       data.rows.forEach((row) => {
@@ -58,9 +58,9 @@ export function SmartInsightsPanel({ data, result }: SmartInsightsPanelProps) {
     if (totalMissing > 0) {
       results.push({
         type: "warning",
-        title: "Missing Values detected",
-        description: `${totalMissing.toLocaleString()} missing values found in raw data`,
-        details: "AI cleansing recommended",
+        title: "결측치(빈 데이터) 감지",
+        description: `데이터 세트 내에서 ${totalMissing.toLocaleString()}개의 누락된 값이 발견되었습니다.`,
+        details: "AI 스마트 정제 기능을 통해 보정하는 것을 권장합니다.",
       })
     }
 
@@ -71,9 +71,9 @@ export function SmartInsightsPanel({ data, result }: SmartInsightsPanelProps) {
 
   return (
     <Card className="rounded-[32px] border-none bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] h-full flex flex-col">
-      {/* 헤더 섹션: 좌측 데이터 미리보기와 높이 정렬 맞춤 */}
+      {/* 헤더 섹션 한글화 */}
       <div className="px-8 py-6 border-b border-slate-50">
-        <h2 className="text-md font-bold text-slate-900 tracking-tight">Smart Insights</h2>
+        <h2 className="text-md font-bold text-slate-900 tracking-tight">AI 데이터 인사이트</h2>
       </div>
 
       <div className="p-8 flex-1 flex flex-col justify-between">
@@ -104,13 +104,13 @@ export function SmartInsightsPanel({ data, result }: SmartInsightsPanelProps) {
           ))}
         </div>
 
-        {/* ⭐️ 1번 전략의 핵심: 하단 메타데이터 영역 (수평 정렬용) */}
+        {/* 하단 메타데이터 영역 한글화 (System Engine -> 분석 엔진 상태) */}
         <div className="mt-8 pt-8 border-t border-slate-50 space-y-5">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">System Engine</span>
+            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">분석 엔진 상태</span>
             <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-500">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              RUNNING
+              정상 가동 중
             </span>
           </div>
           
@@ -118,17 +118,17 @@ export function SmartInsightsPanel({ data, result }: SmartInsightsPanelProps) {
              <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
                <Database className="w-4 h-4 text-slate-300" />
                <div>
-                 <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5">Rows</p>
+                 <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5">총 행 수</p>
                  <p className="text-[13px] font-extrabold text-slate-700 tracking-tight">
-                    {(result?.total_rows || data.rows.length).toLocaleString()}
+                    {(result?.total_rows || data.rows.length).toLocaleString()}개
                  </p>
                </div>
              </div>
              <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
                <Cpu className="w-4 h-4 text-slate-300" />
                <div>
-                 <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5">Latency</p>
-                 <p className="text-[13px] font-extrabold text-slate-700 tracking-tight">0.8s</p>
+                 <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5">분석 속도</p>
+                 <p className="text-[13px] font-extrabold text-slate-700 tracking-tight">0.8초</p>
                </div>
              </div>
           </div>
