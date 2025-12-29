@@ -3,17 +3,18 @@ from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import io
+from fastapi.middleware.cors import CORSMiddleware # [이 줄 추가]
 
 app = FastAPI()
 
-# 프론트엔드(React)와의 통신 허용 설정
+# [여기서부터 아래 5줄을 복사해서 app = FastAPI() 바로 밑에 붙여넣으세요]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"], 
+    allow_origins=["*"], # 모든 접속을 허용합니다 (가장 확실한 방법)
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # 컬럼명 한글 매핑 딕셔너리
 COLUMN_TRANSLATIONS = {
     'age': '나이',
