@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useState, useEffect, useCallback } from "react"
-import { Sparkles, Trash2 } from "lucide-react" // 🗑️ 삭제 아이콘 추가
+import { Sparkles, Trash2 } from "lucide-react"
 
 export default function DashboardPage() {
   const [isClient, setIsClient] = useState(false)
@@ -32,31 +32,29 @@ export default function DashboardPage() {
   const [isCleaning, setIsCleaning] = useState(false)
   const [filterValue, setFilterValue] = useState<string | null>(null)
 
-  // ⭐️ [신규] 로컬 스토리지에서 데이터 복구
+  // ⭐️ [보강] 로컬 스토리지 안전 복구 로직
   useEffect(() => {
     setIsClient(true)
-    const savedMetrics = localStorage.getItem('dash_metrics')
-    const savedResult = localStorage.getItem('dash_result')
-    const savedPresets = localStorage.getItem('dash_presets')
-    const savedFileName = localStorage.getItem('dash_filename')
+    try {
+      const savedMetrics = localStorage.getItem('dash_metrics')
+      const savedResult = localStorage.getItem('dash_result')
+      const savedPresets = localStorage.getItem('dash_presets')
+      const savedFileName = localStorage.getItem('dash_filename')
 
-    if (savedMetrics && savedResult && savedPresets) {
-      try {
+      // 데이터가 모두 존재하고 'undefined' 문자열이 아닐 때만 파싱
+      if (savedMetrics && savedResult && savedPresets && savedMetrics !== "undefined") {
         setDisplayMetrics(JSON.parse(savedMetrics))
         setResult(JSON.parse(savedResult))
         setAnalysisPresets(JSON.parse(savedPresets))
-        // 파일 이름이 있다면 가짜 파일 객체라도 생성하여 상태 유지
-        if (savedFileName) {
-          setUploadedData({ name: savedFileName })
-        }
-        console.log("🚀 이전 분석 데이터를 로컬에서 복구했습니다.")
-      } catch (e) {
-        console.error("데이터 복구 실패:", e)
+        if (savedFileName) setUploadedData({ name: savedFileName })
+        console.log("🚀 분석 데이터를 안전하게 복구했습니다.")
       }
+    } catch (e) {
+      console.error("복구 중 데이터 충돌 발생. 저장소를 초기화합니다.")
+      localStorage.clear() // 데이터가 깨져있으면 지워서 에러 방지
     }
   }, [])
 
-  // ⭐️ [신규] 데이터 완전 초기화 함수
   const handleReset = () => {
     if (confirm("모든 분석 데이터를 삭제하고 초기화할까요?")) {
       localStorage.clear()
@@ -69,7 +67,6 @@ export default function DashboardPage() {
     setResult(null) 
     setSelectedAnalysis(null)
     setFilterValue(null)
-    
     if (!targetColumn) setSelectedPreset(null)
 
     try {
@@ -84,15 +81,13 @@ export default function DashboardPage() {
       })
 
       if (!response.ok) throw new Error("Analysis failed")
-
       const data = await response.json()
       
-      // 상태 업데이트
       setDisplayMetrics(data.display_metrics || [])
       setResult(data.result)
       if (data.analysis_presets) setAnalysisPresets(data.analysis_presets)
       
-      // ⭐️ 로컬 스토리지에 결과 저장 (새로고침 대비)
+      // 로컬 스토리지 업데이트
       localStorage.setItem('dash_metrics', JSON.stringify(data.display_metrics))
       localStorage.setItem('dash_result', JSON.stringify(data.result))
       localStorage.setItem('dash_presets', JSON.stringify(data.analysis_presets))
@@ -112,42 +107,31 @@ export default function DashboardPage() {
 
   const handleCleanData = async () => {
     if (!currentFile) {
-        alert("현재 세션에 파일 객체가 없습니다. 파일을 다시 업로드한 후 정제를 시도해 주세요.")
+        alert("현재 세션에 파일 객체가 없습니다. 파일을 다시 업로드해 주세요.")
         return
     }
     setIsCleaning(true)
-
     try {
       const formData = new FormData()
       formData.append("file", currentFile)
-
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://data-viewer-zyxg.onrender.com'}/clean`, {
         method: "POST",
         body: formData,
       })
-
       if (!response.ok) throw new Error("Cleaning failed")
-
       const data = await response.json()
-      alert(`✨ 정제 완료!\n- 중복 데이터 ${data.removed_duplicates}건 제거\n- 결측치 ${data.fixed_missing}건 보정`);
-
+      alert(`✨ 정제 완료!\n- 중복: ${data.removed_duplicates}건 제거\n- 결측치: ${data.fixed_missing}건 보정`)
       const cleanedFile = new File([data.cleaned_data], currentFile.name, { type: "text/csv" })
       setCurrentFile(cleanedFile)
       analyzeFile(cleanedFile)
-
     } catch (error) {
       console.error("정제 오류:", error)
-      alert("데이터 정제 중 오류가 발생했습니다.")
-    } finally {
-      setIsCleaning(false)
-    }
+    } finally { setIsCleaning(false) }
   }
 
   const handleRowLimitChange = async (value: string) => {
     setRowLimit(value)
-    if (currentFile) {
-      await analyzeFile(currentFile, selectedPreset || undefined, value)
-    }
+    if (currentFile) await analyzeFile(currentFile, selectedPreset || undefined, value)
   }
 
   if (!isClient) return <div className="min-h-screen bg-white" />
@@ -162,19 +146,11 @@ export default function DashboardPage() {
                 <div className="flex-1">
                     <FileUploadZone 
                         onDataUploaded={setUploadedData} 
-                        onFileSelected={(file) => { 
-                            setCurrentFile(file); 
-                            analyzeFile(file); 
-                        }} 
+                        onFileSelected={(file) => { setCurrentFile(file); analyzeFile(file); }} 
                     />
                 </div>
                 {result && (
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={handleReset}
-                        className="text-muted-foreground hover:text-destructive ml-4 mb-2"
-                    >
+                    <Button variant="ghost" size="sm" onClick={handleReset} className="text-muted-foreground hover:text-destructive ml-4 mb-2">
                         <Trash2 className="w-4 h-4 mr-2" />
                         기록 삭제
                     </Button>
@@ -184,9 +160,7 @@ export default function DashboardPage() {
             {isAnalyzing || isCleaning ? (
               <div className="flex flex-col items-center justify-center py-20 space-y-4">
                 <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                <p className="text-gray-400 animate-pulse font-medium">
-                  {isCleaning ? "스마트 정제 기능을 실행 중입니다..." : "지능형 인사이트를 분석 중입니다..."}
-                </p>
+                <p className="text-gray-400 animate-pulse font-medium">처리 중...</p>
               </div>
             ) : (
               result && (
@@ -197,38 +171,26 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-4">
-                    <Button 
-                      onClick={handleCleanData}
-                      variant="outline"
-                      className="border-primary/30 text-primary hover:bg-primary/5 font-bold rounded-xl px-6"
-                      disabled={isCleaning}
-                    >
+                    <Button onClick={handleCleanData} variant="outline" className="border-primary/30 text-primary font-bold rounded-xl px-6">
                       <Sparkles className="w-4 h-4 mr-2" />
                       스마트 데이터 정제
                     </Button>
-
                     <div className="h-6 w-[1px] bg-gray-200 mx-2" />
-
                     <div className="flex flex-wrap gap-2">
                       {analysisPresets.map((preset: any) => (
                         <Button
                           key={`preset-${preset.column}`}
                           variant={selectedPreset === preset.column ? "default" : "outline"}
-                          disabled={isAnalyzing}
                           onClick={() => {
                             if (selectedPreset !== preset.column) {
-                              if (currentFile) {
-                                analyzeFile(currentFile, preset.column)
-                              } else {
-                                // 저장된 데이터가 있을 때 버튼 클릭 시 시각적 전환만 수행
+                              if (currentFile) { analyzeFile(currentFile, preset.column) } 
+                              else {
                                 setSelectedPreset(preset.column)
                                 const p = analysisPresets?.find((p: any) => p.column === preset.column)
                                 setSelectedAnalysis(p || null)
                               }
                             } else {
-                              setSelectedPreset(null)
-                              setSelectedAnalysis(null)
-                              setFilterValue(null)
+                              setSelectedPreset(null); setSelectedAnalysis(null); setFilterValue(null);
                             }
                           }}
                         >
@@ -236,16 +198,12 @@ export default function DashboardPage() {
                         </Button>
                       ))}
                     </div>
-                    
                     <div className="ml-auto">
-                      <Select value={rowLimit} onValueChange={handleRowLimitChange} disabled={isAnalyzing}>
-                        <SelectTrigger className="w-[140px] h-9 text-xs">
-                          <SelectValue placeholder="데이터 범위" />
-                        </SelectTrigger>
+                      <Select value={rowLimit} onValueChange={handleRowLimitChange}>
+                        <SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="10">10개 샘플</SelectItem>
                           <SelectItem value="50">50개</SelectItem>
-                          <SelectItem value="100">100개</SelectItem>
                           <SelectItem value="all">전체 데이터</SelectItem>
                         </SelectContent>
                       </Select>
@@ -253,24 +211,12 @@ export default function DashboardPage() {
                   </div>
 
                   <KpiMetrics displayMetrics={displayMetrics} />
-                  
                   {selectedAnalysis && result && (
                     <div className="w-full min-h-[450px]">
-                      <VisualInsight
-                        selectedAnalysis={selectedAnalysis}
-                        headers={result.headers}
-                        previewRows={result.preview_rows}
-                        onElementClick={setFilterValue} 
-                        activeFilter={filterValue}
-                      />
+                      <VisualInsight selectedAnalysis={selectedAnalysis} headers={result.headers} previewRows={result.preview_rows} onElementClick={setFilterValue} activeFilter={filterValue} />
                     </div>
                   )}
-                  
-                  <DataTable 
-                    result={result} 
-                    filterColumn={selectedAnalysis?.column}
-                    filterValue={filterValue}
-                  />
+                  <DataTable result={result} filterColumn={selectedAnalysis?.column} filterValue={filterValue} />
                 </div>
               )
             )}
