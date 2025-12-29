@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
-import { CheckCircle2, Loader2, AlertCircle } from "lucide-react"
+import { CheckCircle2 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 interface DataCleaningSectionProps {
-  data: {
+  data?: {
     headers: string[]
     rows: string[][]
     fileName: string
@@ -30,16 +30,6 @@ export function DataCleaningSection({ data, result }: DataCleaningSectionProps) 
     return visibility
   })
 
-  const processingSteps = useMemo(() => {
-    const steps = [
-      { label: "File Validation", status: "complete" as const },
-      { label: "Data Parsing", status: "complete" as const },
-      { label: "Schema Detection", status: "complete" as const },
-      { label: "Quality Check", status: (result ? "complete" : "processing") as const },
-    ]
-    return steps
-  }, [result])
-
   const toggleColumn = (header: string) => {
     setColumnVisibility((prev) => ({
       ...prev,
@@ -47,79 +37,82 @@ export function DataCleaningSection({ data, result }: DataCleaningSectionProps) 
     }))
   }
 
-  const visibleHeaders = data?.headers?.filter((h) => columnVisibility[h]) || []
+  const headers = data?.headers || []
+  const visibleHeaders = headers.filter((h) => columnVisibility[h])
   const displayRows = data?.rows?.slice(0, 5) || []
 
-  return (
-    <Card className="rounded-[24px] border border-[#d2d2d7] shadow-sm">
-      <div className="p-8 border-b border-[#d2d2d7]">
-        <h2 className="text-lg font-semibold text-[#1d1d1f] mb-6">Data Cleaning</h2>
+  if (!data || !headers.length) return null
 
-        {/* Step-by-step progress UI */}
-        <div className="space-y-3">
-          {processingSteps.map((step, index) => (
-            <div key={index} className="flex items-center gap-3">
-              {step.status === "complete" ? (
-                <CheckCircle2 className="h-5 w-5 text-[#34c759]" />
-              ) : step.status === "processing" ? (
-                <Loader2 className="h-5 w-5 animate-spin text-[#0071e3]" />
-              ) : (
-                <AlertCircle className="h-5 w-5 text-[#86868b]" />
-              )}
-              <span className={`text-sm ${step.status === "complete" ? "text-[#1d1d1f]" : "text-[#86868b]"}`}>
-                {step.label}
-              </span>
-            </div>
-          ))}
+  return (
+    <Card className="rounded-[32px] border-none bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden h-full flex flex-col">
+      {/* ⭐️ 헤더 영역: KPI 카드와 선을 맞추기 위한 패딩 조정 */}
+      <div className="px-8 py-6 border-b border-slate-50 flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <h2 className="text-md font-bold text-slate-900 tracking-tight">데이터 미리보기</h2>
+          {result && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-500 border border-emerald-100">
+              <CheckCircle2 className="w-3 h-3" />
+              정제 완료
+            </span>
+          )}
         </div>
+        <p className="text-[11px] text-slate-400 font-medium tracking-tight">상위 5개 샘플 데이터</p>
       </div>
 
-      <div className="p-8">
-        {/* Column Management */}
-        <div className="mb-8">
-          <h3 className="text-sm font-semibold text-[#1d1d1f] mb-4">Column Management</h3>
-          <div className="flex flex-wrap gap-3">
-            {data.headers.map((header) => (
+      <div className="p-8 flex-1 flex flex-col">
+        {/* 컬럼 설정 영역 */}
+        <div className="mb-6">
+          <h3 className="text-[11px] font-bold text-slate-300 mb-4 uppercase tracking-widest">Display Columns</h3>
+          <div className="flex flex-wrap gap-2">
+            {headers.map((header) => (
               <div
                 key={header}
-                className="flex items-center gap-3 px-4 py-2 rounded-[12px] border border-[#d2d2d7] bg-[#f5f5f7]"
+                className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200 transition-all duration-200"
               >
                 <Switch
-                  checked={columnVisibility[header] === true}
+                  checked={columnVisibility[header] !== false}
                   onCheckedChange={() => toggleColumn(header)}
-                  className="data-[state=checked]:bg-[#0071e3]"
+                  className="scale-75 data-[state=checked]:bg-primary"
                 />
-                <span className="text-sm text-[#1d1d1f]">{header}</span>
+                <span className="text-[11px] font-bold text-slate-600 tracking-tight">{header}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Data Preview */}
-        <div className="rounded-[12px] border border-[#d2d2d7] overflow-hidden">
+        {/* 테이블 영역: 하단 선을 맞추기 위해 flex-1 적용 */}
+        <div className="rounded-2xl border border-slate-100 overflow-hidden bg-white flex-1">
           <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent border-[#d2d2d7]">
+            <TableHeader className="bg-slate-50/50">
+              <TableRow className="hover:bg-transparent border-slate-100">
                 {visibleHeaders.map((header) => (
-                  <TableHead key={header} className="font-semibold text-[#86868b]">
+                  <TableHead key={header} className="text-[10px] font-bold text-slate-400 py-3 uppercase tracking-tighter">
                     {header}
                   </TableHead>
                 ))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {displayRows.map((row, rowIndex) => (
-                <TableRow key={rowIndex} className="hover:bg-[#f5f5f7]/50 border-[#d2d2d7]">
-                  {visibleHeaders.map((header, cellIndex) => {
-                    const headerIndex = data.headers.indexOf(header)
-                    return (
-                      <TableCell key={cellIndex} className="text-[#1d1d1f]">
-                        {row[headerIndex] || "-"}
-                      </TableCell>
-                    )
-                  })}
+              {displayRows.length > 0 ? (
+                displayRows.map((row, rowIndex) => (
+                  <TableRow key={rowIndex} className="hover:bg-slate-50/30 border-slate-50">
+                    {visibleHeaders.map((header, cellIndex) => {
+                      const headerIndex = headers.indexOf(header)
+                      return (
+                        <TableCell key={cellIndex} className="text-[11px] font-medium text-slate-700 py-3.5">
+                          {row[headerIndex] || "-"}
+                        </TableCell>
+                      )
+                    })}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={visibleHeaders.length} className="text-center py-12 text-xs text-slate-300">
+                    표시할 데이터가 없습니다.
+                  </TableCell>
                 </TableRow>
-              ))}
+              )}
             </TableBody>
           </Table>
         </div>

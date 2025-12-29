@@ -16,72 +16,29 @@ interface KpiMetricsProps {
 }
 
 const mockChartData = [
-  { value: 20 },
-  { value: 35 },
-  { value: 25 },
-  { value: 45 },
-  { value: 40 },
-  { value: 60 },
-  { value: 55 },
+  { value: 30 }, { value: 45 }, { value: 32 }, { value: 50 }, 
+  { value: 42 }, { value: 65 }, { value: 58 },
 ]
 
 export function KpiMetrics({ displayMetrics = [], mainFeature }: KpiMetricsProps) {
-  // 값 포맷팅 함수
-  const formatValue = (value: number, unit: string, label: string): string => {
-    const formattedNumber = value.toLocaleString()
-    
-    // 평균은 화폐 단위(₩, $) 제거하고 숫자만 표시 (단, 나이 등 특정 단위는 유지)
-    const isAverage = label.includes("(평균)")
-    
-    if (isAverage) {
-      // 평균인 경우 화폐 단위 없이 숫자만 (천 단위 콤마는 유지)
-      // 단, 나이(age) 등 특정 단위가 있는 경우는 표시 (세, 점 등)
-      if (unit && unit !== "₩" && unit !== "$") {
-        return `${formattedNumber} ${unit}`
-      }
-      return formattedNumber
-    }
-    
-    // 합계나 다른 지표는 단위 포함
-    if (unit) {
-      // 단위가 앞에 오는 경우 (₩, $ 등)
-      if (unit === "₩" || unit === "$") {
-        return `${unit}${formattedNumber}`
-      }
-      // 단위가 뒤에 오는 경우 (세, 점, 명, 건, 개 등)
-      return `${formattedNumber} ${unit}`
-    }
-    
-    return formattedNumber
+  
+  const formatValue = (value: number, label: string): string => {
+    // ⭐️ 천 단위 콤마 + 평균일 때만 소수점 1자리 노출
+    return value.toLocaleString(undefined, {
+      minimumFractionDigits: label.includes("(평균)") ? 1 : 0,
+      maximumFractionDigits: 1
+    })
   }
 
-  // 데이터가 없을 때 기본 카드 표시
   if (displayMetrics.length === 0) {
     return (
       <div className="grid gap-6 md:grid-cols-3">
         {[1, 2, 3].map((index) => (
-          <Card
-            key={index}
-            className="rounded-3xl border border-border bg-card p-8 shadow-sm hover:shadow-md transition-shadow"
-          >
+          <Card key={index} className="rounded-[32px] border-none bg-white p-8 shadow-sm animate-pulse">
             <div className="space-y-6">
-              <div>
-                <p className="text-sm text-muted-foreground mb-2">로딩 중...</p>
-                <p className="text-4xl font-semibold text-foreground">0</p>
-              </div>
-              <div className="h-[80px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={mockChartData}>
-                    <Line
-                      type="monotone"
-                      dataKey="value"
-                      stroke="hsl(var(--chart-2))"
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <div className="h-4 w-20 bg-slate-100 rounded" />
+              <div className="h-10 w-32 bg-slate-100 rounded" />
+              <div className="h-[80px] bg-slate-50 rounded-2xl" />
             </div>
           </Card>
         ))}
@@ -94,29 +51,53 @@ export function KpiMetrics({ displayMetrics = [], mainFeature }: KpiMetricsProps
       {displayMetrics.map((metric, index) => (
         <Card
           key={index}
-          className="rounded-3xl border border-border bg-card p-8 shadow-sm hover:shadow-md transition-shadow"
+          className="group rounded-[32px] border-none bg-white p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.06)] transition-all duration-500"
         >
           <div className="space-y-6">
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">{metric.label}</p>
-              <p className="text-4xl font-semibold text-foreground">
-                {formatValue(metric.value, metric.unit, metric.label)}
+            <div className="relative">
+              {/* ⭐️ 라벨 대비 강화 */}
+              <p className="text-[11px] font-bold text-slate-400 mb-1 uppercase tracking-widest">
+                {metric.label}
               </p>
-              {mainFeature && (
-                <p className="text-xs text-slate-400 text-center mt-2">
-                  (기준: {mainFeature})
+              
+              <div className="flex items-baseline gap-1">
+                {/* ⭐️ 화폐 단위가 앞에 붙는 경우 ($1,000) */}
+                {(metric.unit === "₩" || metric.unit === "$") && (
+                  <span className="text-xl font-bold text-slate-900 mr-0.5">{metric.unit}</span>
+                )}
+                
+                {/* ⭐️ 수치 폰트 굵기 강화 */}
+                <p className="text-4xl font-extrabold text-slate-900 tracking-tighter">
+                  {formatValue(metric.value, metric.label)}
                 </p>
+                
+                {/* ⭐️ 화폐 외 단위가 뒤에 붙는 경우 (35.4 세) */}
+                {metric.unit && metric.unit !== "₩" && metric.unit !== "$" && (
+                  <span className="text-lg font-bold text-slate-400 ml-1">{metric.unit}</span>
+                )}
+              </div>
+
+              {mainFeature && (
+                <span className="absolute top-0 right-0 px-2 py-0.5 bg-primary/5 text-primary text-[10px] font-bold rounded-full border border-primary/10">
+                  {mainFeature}
+                </span>
               )}
             </div>
 
-            <div className="h-[80px]">
+            <div className="h-[80px] w-full opacity-40 group-hover:opacity-100 transition-opacity duration-700">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={mockChartData}>
+                  <defs>
+                    <linearGradient id={`lineGradient-${index}`} x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#0071e3" />
+                      <stop offset="100%" stopColor="#63b3ed" />
+                    </linearGradient>
+                  </defs>
                   <Line
-                    type="monotone"
+                    type="natural"
                     dataKey="value"
-                    stroke="hsl(var(--chart-2))"
-                    strokeWidth={2}
+                    stroke={`url(#lineGradient-${index})`}
+                    strokeWidth={3}
                     dot={false}
                   />
                 </LineChart>

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import { Card } from "@/components/ui/card"
-import { CheckCircle2, TrendingUp } from "lucide-react"
+import { CheckCircle2, TrendingUp, AlertCircle, Cpu, Database } from "lucide-react"
 
 interface SmartInsightsPanelProps {
   data: {
@@ -19,41 +19,11 @@ interface SmartInsightsPanelProps {
 
 export function SmartInsightsPanel({ data, result }: SmartInsightsPanelProps) {
   const insights = useMemo(() => {
-    if (!data || !data.headers || !data.rows) {
-      return []
-    }
+    if (!data || !data.headers || !data.rows) return []
 
     const results = []
-
-    // Detect missing values
-    let totalMissing = 0
-    const missingByColumn: Record<string, number> = {}
-
-    data.headers.forEach((header, index) => {
-      let missing = 0
-      data.rows.forEach((row) => {
-        if (!row[index] || row[index].trim() === "") {
-          missing++
-          totalMissing++
-        }
-      })
-      if (missing > 0) {
-        missingByColumn[header] = missing
-      }
-    })
-
-    if (totalMissing > 0) {
-      results.push({
-        type: "warning",
-        title: "Missing Values Detected",
-        description: `Found ${totalMissing.toLocaleString()} missing values across ${Object.keys(missingByColumn).length.toLocaleString()} columns`,
-        details: Object.entries(missingByColumn)
-          .map(([col, count]) => `${col}: ${count.toLocaleString()}`)
-          .join(", "),
-      })
-    }
-
-    // Data quality check
+    
+    // 1. 데이터 구조 검증
     const totalRows = result?.total_rows || data.rows.length
     results.push({
       type: "success",
@@ -62,7 +32,7 @@ export function SmartInsightsPanel({ data, result }: SmartInsightsPanelProps) {
       details: null,
     })
 
-    // Check for numeric columns
+    // 2. 수치형 컬럼 감지
     const numericColumns = data.headers.filter((header, index) => {
       const sample = data.rows.slice(0, 10).map((row) => row[index])
       return sample.every((val) => !isNaN(Number(val)) && val !== "")
@@ -77,38 +47,91 @@ export function SmartInsightsPanel({ data, result }: SmartInsightsPanelProps) {
       })
     }
 
-    return results
-  }, [data])
+    // 3. 결측치 감지
+    let totalMissing = 0
+    data.headers.forEach((_, index) => {
+      data.rows.forEach((row) => {
+        if (!row[index] || row[index].trim() === "") totalMissing++
+      })
+    })
 
-  if (!data || !data.headers || !data.rows) {
-    return null
-  }
+    if (totalMissing > 0) {
+      results.push({
+        type: "warning",
+        title: "Missing Values detected",
+        description: `${totalMissing.toLocaleString()} missing values found in raw data`,
+        details: "AI cleansing recommended",
+      })
+    }
+
+    return results
+  }, [data, result])
+
+  if (!data || !data.headers || !data.rows) return null
 
   return (
-    <Card className="rounded-[24px] border border-[#d2d2d7] shadow-sm">
-      <div className="p-8 border-b border-[#d2d2d7]">
-        <h2 className="text-lg font-semibold text-[#1d1d1f]">Smart Insights</h2>
+    <Card className="rounded-[32px] border-none bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] h-full flex flex-col">
+      {/* 헤더 섹션: 좌측 데이터 미리보기와 높이 정렬 맞춤 */}
+      <div className="px-8 py-6 border-b border-slate-50">
+        <h2 className="text-md font-bold text-slate-900 tracking-tight">Smart Insights</h2>
       </div>
-      <div className="p-8">
+
+      <div className="p-8 flex-1 flex flex-col justify-between">
+        {/* 상단: 인사이트 목록 */}
         <div className="space-y-4">
           {insights.map((insight, index) => (
-            <div key={index} className="p-5 rounded-[12px] border border-[#d2d2d7] bg-[#f5f5f7]">
+            <div 
+              key={index} 
+              className="p-4 rounded-2xl border border-slate-50 bg-slate-50/30 transition-all hover:bg-slate-50"
+            >
               <div className="flex items-start gap-3">
                 <div className="mt-0.5">
-                  {insight.type === "warning" && (
-                    <div className="h-2 w-2 rounded-full bg-[#ff3b30]" aria-label="Warning indicator" />
-                  )}
-                  {insight.type === "success" && <CheckCircle2 className="h-5 w-5 text-[#34c759]" />}
-                  {insight.type === "info" && <TrendingUp className="h-5 w-5 text-[#0071e3]" />}
+                  {insight.type === "warning" && <AlertCircle className="h-5 w-5 text-amber-500" />}
+                  {insight.type === "success" && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
+                  {insight.type === "info" && <TrendingUp className="h-5 w-5 text-blue-500" />}
                 </div>
-                <div className="flex-1 space-y-1">
-                  <p className="text-sm font-semibold text-[#1d1d1f]">{insight.title}</p>
-                  <p className="text-xs text-[#86868b]">{insight.description}</p>
-                  {insight.details && <p className="text-xs text-[#86868b] mt-2 italic">{insight.details}</p>}
+                <div className="flex-1">
+                  <p className="text-[13px] font-bold text-slate-900 mb-0.5">{insight.title}</p>
+                  <p className="text-[11px] text-slate-400 font-medium leading-relaxed">{insight.description}</p>
+                  {insight.details && (
+                    <p className="text-[10px] text-slate-400 mt-2 bg-white/50 p-2 rounded-lg border border-slate-100 italic">
+                      {insight.details}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
           ))}
+        </div>
+
+        {/* ⭐️ 1번 전략의 핵심: 하단 메타데이터 영역 (수평 정렬용) */}
+        <div className="mt-8 pt-8 border-t border-slate-50 space-y-5">
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">System Engine</span>
+            <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-500">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              RUNNING
+            </span>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3">
+             <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
+               <Database className="w-4 h-4 text-slate-300" />
+               <div>
+                 <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5">Rows</p>
+                 <p className="text-[13px] font-extrabold text-slate-700 tracking-tight">
+                    {(result?.total_rows || data.rows.length).toLocaleString()}
+                 </p>
+               </div>
+             </div>
+             <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
+               <Cpu className="w-4 h-4 text-slate-300" />
+               <div>
+                 <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5">Latency</p>
+                 <p className="text-[13px] font-extrabold text-slate-700 tracking-tight">0.8s</p>
+               </div>
+             </div>
+          </div>
         </div>
       </div>
     </Card>
