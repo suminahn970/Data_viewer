@@ -12,17 +12,18 @@ import {
   CartesianGrid,
   AreaChart,
   Area,
-  ResponsiveContainer, // ⭐️ 필수 추가
+  ScatterChart, // ⭐️ 추가: 상관관계 분석용
+  Scatter,      // ⭐️ 추가: 상관관계 분석용
+  ResponsiveContainer,
   Tooltip,
   Legend,
 } from "recharts"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { useMemo, useEffect, useState } from "react"
 
 interface AnalysisPreset {
   label: string
   column: string
-  type: "distribution" | "statistics" | "status"
+  type: "distribution" | "statistics" | "status" | "correlation" | "outlier" // ⭐️ 타입 확장
 }
 
 interface VisualInsightProps {
@@ -40,7 +41,6 @@ const COLORS = [
 export function VisualInsight({ selectedAnalysis, headers, previewRows }: VisualInsightProps) {
   const [mounted, setMounted] = useState(false)
 
-  // ⭐️ 클라이언트 사이드 렌더링 보장 (Hydration 에러 방지)
   useEffect(() => {
     setMounted(true)
     return () => setMounted(false)
@@ -48,6 +48,19 @@ export function VisualInsight({ selectedAnalysis, headers, previewRows }: Visual
 
   const chartData = useMemo(() => {
     if (!selectedAnalysis || !headers || !previewRows || previewRows.length === 0) return null
+
+    // ⭐️ [신규] 상관관계(Correlation) 데이터 처리 로직
+    if (selectedAnalysis.type === "correlation") {
+      const [col1, col2] = selectedAnalysis.column.split("__vs__")
+      const idx1 = headers.indexOf(col1)
+      const idx2 = headers.indexOf(col2)
+      if (idx1 === -1 || idx2 === -1) return null
+
+      return previewRows.map((row) => ({
+        x: typeof row[idx1] === "number" ? row[idx1] : parseFloat(String(row[idx1])),
+        y: typeof row[idx2] === "number" ? row[idx2] : parseFloat(String(row[idx2])),
+      })).filter(d => !isNaN(d.x) && !isNaN(d.y)).slice(0, 300) // 성능을 위해 300개 제한
+    }
 
     const columnIndex = headers.indexOf(selectedAnalysis.column)
     if (columnIndex === -1) return null
@@ -57,6 +70,19 @@ export function VisualInsight({ selectedAnalysis, headers, previewRows }: Visual
       .filter((val) => val !== null && val !== undefined && val !== "")
 
     if (columnData.length === 0) return null
+
+    // ⭐️ [신규] 이상치(Outlier) 데이터 처리 로직
+    if (selectedAnalysis.type === "outlier") {
+      const nums = columnData.map(v => parseFloat(String(v))).filter(v => !isNaN(v))
+      if (nums.length === 0) return null
+      const avg = nums.reduce((a, b) => a + b, 0) / nums.length
+      // 평균에서 50% 이상 차이나면 임시 이상치로 간주 (시각적 강조용)
+      return nums.map((v, i) => ({
+        name: i,
+        value: v,
+        isOutlier: Math.abs(v - avg) > avg * 0.5
+      })).slice(0, 50) // 바 차트 가독성을 위해 50개 제한
+    }
 
     try {
       if (selectedAnalysis.type === "distribution" || selectedAnalysis.type === "status") {
@@ -97,15 +123,38 @@ export function VisualInsight({ selectedAnalysis, headers, previewRows }: Visual
     return null
   }, [selectedAnalysis, headers, previewRows])
 
-  // 마운트 전이거나 데이터가 없으면 충돌 방지를 위해 null 반환
   if (!mounted || !selectedAnalysis || !chartData || chartData.length === 0) return null
 
   const renderChart = () => {
     return (
       <div className="h-[400px] w-full">
-        {/* ⭐️ ResponsiveContainer로 감싸야 튕김 현상을 막을 수 있습니다. */}
         <ResponsiveContainer width="100%" height="100%">
-          {selectedAnalysis.type === "distribution" && chartData.length <= 5 ? (
+          {/* 상관관계 분석: 산점도 */}
+          {selectedAnalysis.type === "correlation" ? (
+            <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+              <XAxis type="number" dataKey="x" name="X축" fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis type="number" dataKey="y" name="Y축" fontSize={12} tickLine={false} axisLine={false} />
+              <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+              <Scatter name="관계 분석" data={chartData} fill="hsl(217, 91%, 60%)" fillOpacity={0.6} />
+            </ScatterChart>
+          ) : 
+          /* 이상치 분석: 강조 바 차트 */
+          selectedAnalysis.type === "outlier" ? (
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.2} />
+              <XAxis dataKey="name" hide />
+              <YAxis fontSize={12} tickLine={false} axisLine={false} />
+              <Tooltip />
+              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                {chartData.map((entry: any, index: number) => (
+                  <Cell key={`cell-${index}`} fill={entry.isOutlier ? "hsl(0, 72%, 51%)" : "hsl(217, 91%, 60%)"} />
+                ))}
+              </Bar>
+            </BarChart>
+          ) :
+          /* 기존 차트 로직 */
+          selectedAnalysis.type === "distribution" && chartData.length <= 5 ? (
             <PieChart>
               <Pie
                 data={chartData}
@@ -146,10 +195,10 @@ export function VisualInsight({ selectedAnalysis, headers, previewRows }: Visual
   }
 
   return (
-    <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm transition-all duration-500">
+    <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm transition-all duration-500 animate-in fade-in slide-in-from-bottom-4">
       <div className="mb-6">
         <h3 className="text-lg font-semibold text-foreground mb-1">{selectedAnalysis.label}</h3>
-        <p className="text-sm text-muted-foreground">분석 대상: {selectedAnalysis.column}</p>
+        <p className="text-sm text-muted-foreground">자동 통찰 탐지 결과</p>
       </div>
       {renderChart()}
     </Card>
