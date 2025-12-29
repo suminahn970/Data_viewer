@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useState, useEffect, useCallback } from "react"
-import { Sparkles, RefreshCcw } from "lucide-react" // ✨ 아이콘 추가
+import { Sparkles, Trash2 } from "lucide-react" // 🗑️ 삭제 아이콘 추가
 
 export default function DashboardPage() {
   const [isClient, setIsClient] = useState(false)
@@ -29,13 +29,40 @@ export default function DashboardPage() {
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [rowLimit, setRowLimit] = useState("10")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [isCleaning, setIsCleaning] = useState(false) // ⭐️ 정제 상태 추가
-
+  const [isCleaning, setIsCleaning] = useState(false)
   const [filterValue, setFilterValue] = useState<string | null>(null)
 
+  // ⭐️ [신규] 로컬 스토리지에서 데이터 복구
   useEffect(() => {
     setIsClient(true)
+    const savedMetrics = localStorage.getItem('dash_metrics')
+    const savedResult = localStorage.getItem('dash_result')
+    const savedPresets = localStorage.getItem('dash_presets')
+    const savedFileName = localStorage.getItem('dash_filename')
+
+    if (savedMetrics && savedResult && savedPresets) {
+      try {
+        setDisplayMetrics(JSON.parse(savedMetrics))
+        setResult(JSON.parse(savedResult))
+        setAnalysisPresets(JSON.parse(savedPresets))
+        // 파일 이름이 있다면 가짜 파일 객체라도 생성하여 상태 유지
+        if (savedFileName) {
+          setUploadedData({ name: savedFileName })
+        }
+        console.log("🚀 이전 분석 데이터를 로컬에서 복구했습니다.")
+      } catch (e) {
+        console.error("데이터 복구 실패:", e)
+      }
+    }
   }, [])
+
+  // ⭐️ [신규] 데이터 완전 초기화 함수
+  const handleReset = () => {
+    if (confirm("모든 분석 데이터를 삭제하고 초기화할까요?")) {
+      localStorage.clear()
+      window.location.reload()
+    }
+  }
 
   const analyzeFile = useCallback(async (file: File, targetColumn?: string, limit?: string) => {
     setIsAnalyzing(true)
@@ -59,10 +86,18 @@ export default function DashboardPage() {
       if (!response.ok) throw new Error("Analysis failed")
 
       const data = await response.json()
+      
+      // 상태 업데이트
       setDisplayMetrics(data.display_metrics || [])
       setResult(data.result)
       if (data.analysis_presets) setAnalysisPresets(data.analysis_presets)
       
+      // ⭐️ 로컬 스토리지에 결과 저장 (새로고침 대비)
+      localStorage.setItem('dash_metrics', JSON.stringify(data.display_metrics))
+      localStorage.setItem('dash_result', JSON.stringify(data.result))
+      localStorage.setItem('dash_presets', JSON.stringify(data.analysis_presets))
+      localStorage.setItem('dash_filename', file.name)
+
       if (targetColumn) {
         setSelectedPreset(targetColumn)
         const preset = data.analysis_presets?.find((p: any) => p.column === targetColumn)
@@ -75,9 +110,11 @@ export default function DashboardPage() {
     }
   }, [rowLimit])
 
-  // ⭐️ [신규] 스마트 데이터 정제 함수
   const handleCleanData = async () => {
-    if (!currentFile) return
+    if (!currentFile) {
+        alert("현재 세션에 파일 객체가 없습니다. 파일을 다시 업로드한 후 정제를 시도해 주세요.")
+        return
+    }
     setIsCleaning(true)
 
     try {
@@ -92,14 +129,9 @@ export default function DashboardPage() {
       if (!response.ok) throw new Error("Cleaning failed")
 
       const data = await response.json()
-      
-      // 1. 알림창 표시
       alert(`✨ 정제 완료!\n- 중복 데이터 ${data.removed_duplicates}건 제거\n- 결측치 ${data.fixed_missing}건 보정`);
 
-      // 2. 정제된 CSV 텍스트를 다시 File 객체로 변환
       const cleanedFile = new File([data.cleaned_data], currentFile.name, { type: "text/csv" })
-      
-      // 3. 파일 상태 업데이트 및 재분석 실행
       setCurrentFile(cleanedFile)
       analyzeFile(cleanedFile)
 
@@ -126,13 +158,28 @@ export default function DashboardPage() {
       <main className="flex-1 overflow-auto">
         <div className="mx-auto max-w-[1400px] px-12 py-10">
           <div className="space-y-8">
-            <FileUploadZone 
-              onDataUploaded={setUploadedData} 
-              onFileSelected={(file) => { 
-                setCurrentFile(file); 
-                analyzeFile(file); 
-              }} 
-            />
+            <div className="flex justify-between items-end">
+                <div className="flex-1">
+                    <FileUploadZone 
+                        onDataUploaded={setUploadedData} 
+                        onFileSelected={(file) => { 
+                            setCurrentFile(file); 
+                            analyzeFile(file); 
+                        }} 
+                    />
+                </div>
+                {result && (
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={handleReset}
+                        className="text-muted-foreground hover:text-destructive ml-4 mb-2"
+                    >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        기록 삭제
+                    </Button>
+                )}
+            </div>
 
             {isAnalyzing || isCleaning ? (
               <div className="flex flex-col items-center justify-center py-20 space-y-4">
@@ -150,7 +197,6 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-4">
-                    {/* ⭐️ 스마트 정제 버튼 추가 */}
                     <Button 
                       onClick={handleCleanData}
                       variant="outline"
@@ -171,7 +217,14 @@ export default function DashboardPage() {
                           disabled={isAnalyzing}
                           onClick={() => {
                             if (selectedPreset !== preset.column) {
-                              analyzeFile(currentFile!, preset.column)
+                              if (currentFile) {
+                                analyzeFile(currentFile, preset.column)
+                              } else {
+                                // 저장된 데이터가 있을 때 버튼 클릭 시 시각적 전환만 수행
+                                setSelectedPreset(preset.column)
+                                const p = analysisPresets?.find((p: any) => p.column === preset.column)
+                                setSelectedAnalysis(p || null)
+                              }
                             } else {
                               setSelectedPreset(null)
                               setSelectedAnalysis(null)
@@ -202,10 +255,7 @@ export default function DashboardPage() {
                   <KpiMetrics displayMetrics={displayMetrics} />
                   
                   {selectedAnalysis && result && (
-                    <div 
-                      key={`chart-area-${selectedPreset}-${result.preview_rows.length}`} 
-                      className="w-full min-h-[450px]"
-                    >
+                    <div className="w-full min-h-[450px]">
                       <VisualInsight
                         selectedAnalysis={selectedAnalysis}
                         headers={result.headers}
