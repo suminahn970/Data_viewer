@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useState, useEffect, useCallback } from "react"
+import { Sparkles, RefreshCcw } from "lucide-react" // ✨ 아이콘 추가
 
 export default function DashboardPage() {
   const [isClient, setIsClient] = useState(false)
@@ -28,8 +29,8 @@ export default function DashboardPage() {
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [rowLimit, setRowLimit] = useState("10")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  
-  // ⭐️ 인터랙티브 필터: 차트에서 선택한 카테고리 값을 저장
+  const [isCleaning, setIsCleaning] = useState(false) // ⭐️ 정제 상태 추가
+
   const [filterValue, setFilterValue] = useState<string | null>(null)
 
   useEffect(() => {
@@ -40,7 +41,7 @@ export default function DashboardPage() {
     setIsAnalyzing(true)
     setResult(null) 
     setSelectedAnalysis(null)
-    setFilterValue(null) // ⭐️ 새로운 분석 시 기존 필터 초기화
+    setFilterValue(null)
     
     if (!targetColumn) setSelectedPreset(null)
 
@@ -74,6 +75,42 @@ export default function DashboardPage() {
     }
   }, [rowLimit])
 
+  // ⭐️ [신규] 스마트 데이터 정제 함수
+  const handleCleanData = async () => {
+    if (!currentFile) return
+    setIsCleaning(true)
+
+    try {
+      const formData = new FormData()
+      formData.append("file", currentFile)
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://data-viewer-zyxg.onrender.com'}/clean`, {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!response.ok) throw new Error("Cleaning failed")
+
+      const data = await response.json()
+      
+      // 1. 알림창 표시
+      alert(`✨ 정제 완료!\n- 중복 데이터 ${data.removed_duplicates}건 제거\n- 결측치 ${data.fixed_missing}건 보정`);
+
+      // 2. 정제된 CSV 텍스트를 다시 File 객체로 변환
+      const cleanedFile = new File([data.cleaned_data], currentFile.name, { type: "text/csv" })
+      
+      // 3. 파일 상태 업데이트 및 재분석 실행
+      setCurrentFile(cleanedFile)
+      analyzeFile(cleanedFile)
+
+    } catch (error) {
+      console.error("정제 오류:", error)
+      alert("데이터 정제 중 오류가 발생했습니다.")
+    } finally {
+      setIsCleaning(false)
+    }
+  }
+
   const handleRowLimitChange = async (value: string) => {
     setRowLimit(value)
     if (currentFile) {
@@ -97,10 +134,12 @@ export default function DashboardPage() {
               }} 
             />
 
-            {isAnalyzing ? (
+            {isAnalyzing || isCleaning ? (
               <div className="flex flex-col items-center justify-center py-20 space-y-4">
                 <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                <p className="text-gray-400 animate-pulse font-medium">지능형 인사이트를 분석 중입니다...</p>
+                <p className="text-gray-400 animate-pulse font-medium">
+                  {isCleaning ? "스마트 정제 기능을 실행 중입니다..." : "지능형 인사이트를 분석 중입니다..."}
+                </p>
               </div>
             ) : (
               result && (
@@ -111,6 +150,19 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-4">
+                    {/* ⭐️ 스마트 정제 버튼 추가 */}
+                    <Button 
+                      onClick={handleCleanData}
+                      variant="outline"
+                      className="border-primary/30 text-primary hover:bg-primary/5 font-bold rounded-xl px-6"
+                      disabled={isCleaning}
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      스마트 데이터 정제
+                    </Button>
+
+                    <div className="h-6 w-[1px] bg-gray-200 mx-2" />
+
                     <div className="flex flex-wrap gap-2">
                       {analysisPresets.map((preset: any) => (
                         <Button
@@ -123,7 +175,7 @@ export default function DashboardPage() {
                             } else {
                               setSelectedPreset(null)
                               setSelectedAnalysis(null)
-                              setFilterValue(null) // ⭐️ 프리셋 해제 시 필터도 해제
+                              setFilterValue(null)
                             }
                           }}
                         >
@@ -154,7 +206,6 @@ export default function DashboardPage() {
                       key={`chart-area-${selectedPreset}-${result.preview_rows.length}`} 
                       className="w-full min-h-[450px]"
                     >
-                      {/* ⭐️ 인터랙티브 필터 적용: 클릭 이벤트와 현재 필터값 전달 */}
                       <VisualInsight
                         selectedAnalysis={selectedAnalysis}
                         headers={result.headers}
@@ -165,7 +216,6 @@ export default function DashboardPage() {
                     </div>
                   )}
                   
-                  {/* ⭐️ 인터랙티브 필터 적용: 어떤 컬럼을 어떤 값으로 필터링할지 전달 */}
                   <DataTable 
                     result={result} 
                     filterColumn={selectedAnalysis?.column}
