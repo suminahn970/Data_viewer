@@ -7,9 +7,10 @@ import io
 app = FastAPI()
 
 # CORS 설정을 가장 먼저, 한 번만 선언합니다.
+# main.py 상단 app = FastAPI() 바로 아래에 넣으세요
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"], # 모든 도메인에서의 접속을 허용 (배포 시 필수)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
