@@ -61,7 +61,8 @@ export default function DashboardPage() {
 
   const handleFileSelected = async (file: File) => {
     setCurrentFile(file)
-    await analyzeFile(file)
+    // 초기 업로드 시 기본값 '10'으로 분석 요청
+    await analyzeFile(file, undefined, "10")
   }
 
   const analyzeFile = async (file: File, targetColumn?: string, limit?: string) => {
@@ -70,11 +71,14 @@ export default function DashboardPage() {
     try {
       const formData = new FormData()
       formData.append("file", file)
+      
       if (targetColumn) {
         formData.append("target_column", targetColumn)
       }
-      // ⭐️ 수정: 매개변수로 들어온 limit이 있으면 그것을 쓰고, 없으면 상태값(rowLimit)을 씁니다.
-      formData.append("row_limit", limit || rowLimit)
+      
+      // 전송할 limit 값을 결정 (매개변수 우선, 없으면 상태값, 그것도 없으면 "10")
+      const finalLimit = limit || rowLimit || "10"
+      formData.append("row_limit", finalLimit)
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://data-viewer-zyxg.onrender.com'}/analyze`, {
         method: "POST",
@@ -82,31 +86,31 @@ export default function DashboardPage() {
       })
 
       if (!response.ok) {
-        throw new Error("Analysis failed")
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || "Analysis failed")
       }
 
       const analysisData = await response.json()
+      
+      // 데이터 업데이트
       setDisplayMetrics(analysisData.display_metrics || [])
       setResult(analysisData.result)
       setMainFeature(analysisData.main_feature || null)
       setAnalyzedRows(analysisData.analyzed_rows || 0)
       
-      if (analysisData.analysis_presets && analysisData.analysis_presets.length > 0) {
+      if (analysisData.analysis_presets?.length > 0) {
         setAnalysisPresets(analysisData.analysis_presets)
       }
       
+      // 타겟 컬럼이 바뀐 경우 프리셋 선택 상태 업데이트
       if (targetColumn) {
         setSelectedPreset(targetColumn)
         const preset = analysisData.analysis_presets?.find((p: AnalysisPreset) => p.column === targetColumn)
-        if (preset) {
-          setSelectedAnalysis(preset)
-        }
-      } else if (!targetColumn && !selectedPreset) {
-        setSelectedPreset(null)
-        setSelectedAnalysis(null)
+        if (preset) setSelectedAnalysis(preset)
       }
     } catch (error) {
-      console.error("Error analyzing data:", error)
+      console.error("분석 중 오류 발생:", error)
+      alert("데이터 분석 중 오류가 발생했습니다. 파일 형식을 확인해주세요.")
     } finally {
       setIsAnalyzing(false)
     }
@@ -118,6 +122,7 @@ export default function DashboardPage() {
     if (selectedAnalysis?.column === preset.column) {
       setSelectedAnalysis(null)
       setSelectedPreset(null)
+      await analyzeFile(currentFile, undefined, rowLimit)
     } else {
       setSelectedAnalysis(preset)
       setSelectedPreset(preset.column)
@@ -125,11 +130,11 @@ export default function DashboardPage() {
     }
   }
 
-  // ⭐️ 핵심 수정 부분: 비동기 상태 업데이트 문제를 해결하기 위해 value를 직접 넘깁니다.
   const handleRowLimitChange = async (value: string) => {
+    if (!value) return
     setRowLimit(value)
     if (currentFile) {
-      // ⭐️ analyzeFile의 세 번째 인자로 value를 직접 전달하여 즉시 반영되게 합니다.
+      // 변경된 value를 즉시 전달
       await analyzeFile(currentFile, selectedPreset || undefined, value)
     }
   }
@@ -144,7 +149,7 @@ export default function DashboardPage() {
             <FileUploadZone onDataUploaded={handleDataUploaded} onFileSelected={handleFileSelected} />
 
             {isAnalyzing && (
-              <div className="text-center text-[#86868b] py-8 font-medium">데이터 분석 중...</div>
+              <div className="text-center text-[#86868b] py-8 font-medium animate-pulse">데이터를 분석하고 있습니다...</div>
             )}
 
             {uploadedData && (
@@ -163,20 +168,15 @@ export default function DashboardPage() {
                       variant={selectedPreset === preset.column ? "default" : "outline"}
                       size="sm"
                       onClick={() => handlePresetClick(preset)}
-                      className={
-                        selectedPreset === preset.column
-                          ? "bg-primary text-primary-foreground"
-                          : ""
-                      }
                     >
                       {preset.label}
                     </Button>
                   ))}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 ml-auto">
                   <Select value={rowLimit} onValueChange={handleRowLimitChange}>
                     <SelectTrigger className="w-[140px] h-9 text-sm">
-                      <SelectValue placeholder="데이터 양 선택" />
+                      <SelectValue placeholder="데이터 양" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="10">10개 샘플</SelectItem>
@@ -186,8 +186,8 @@ export default function DashboardPage() {
                     </SelectContent>
                   </Select>
                   {analyzedRows > 0 && (
-                    <span className="text-sm text-muted-foreground">
-                      현재 {analyzedRows.toLocaleString()}개의 데이터를 분석 중입니다
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">
+                      총 {analyzedRows.toLocaleString()}개 분석됨
                     </span>
                   )}
                 </div>
