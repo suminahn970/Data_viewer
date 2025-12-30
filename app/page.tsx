@@ -8,15 +8,57 @@ import { DataCleaningSection } from "@/components/data-cleaning-section"
 import { SmartInsightsPanel } from "@/components/smart-insights-panel"
 import { VisualInsight } from "@/components/visual-insight"
 import { Button } from "@/components/ui/button"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { 
+  Trash2, 
+  LayoutDashboard, 
+  FileBarChart2, 
+  XCircle, 
+  BarChart3, 
+  Download, 
+  FileText, 
+  Share2, 
+  ChevronDown,
+  Layout,
+  CheckCircle2,
+  Sparkles
+} from "lucide-react"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { useState, useEffect, useCallback } from "react"
-import { Sparkles, Trash2, LayoutDashboard, FileBarChart2, XCircle } from "lucide-react" // ⭐️ XCircle 아이콘 추가
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
+// ⭐️ 번역 맵 및 지능형 번역기
+const COLUMN_MAP: Record<string, string> = {
+  "Project Code": "프로젝트 코드",
+  "Title": "과제명",
+  "Commitment in U.A": "지원 금액",
+  "Country": "국가",
+  "Status": "진행 상태",
+  "Sector": "분야",
+  "GENDER": "성별",
+  "AGE": "나이",
+  "user_id": "사용자 ID",
+  "monthly_income_manwon": "월 소득(만원)",
+  "monthly_premium_chonwon": "월 보험료(천원)",
+  "avg_steps": "평균 걸음 수",
+};
+
+const smartTranslate = (header: string): string => {
+  const h = header.toUpperCase().trim();
+  if (COLUMN_MAP[header]) return COLUMN_MAP[header];
+  if (COLUMN_MAP[h]) return COLUMN_MAP[h];
+  if (h.includes("GENDER")) return "성별";
+  if (h.includes("AGE")) return "나이";
+  if (h.includes("INVEST")) return "투자 성향";
+  if (h.includes("MUTUAL FUNDS")) return "뮤추얼 펀드";
+  if (h.includes("EQUITY")) return "주식 시장";
+  if (h.includes("DEBENTURES")) return "채권";
+  if (h.includes("GOLD")) return "금 투자";
+  return header;
+};
 
 export default function DashboardPage() {
   const [isClient, setIsClient] = useState(false)
@@ -24,246 +66,248 @@ export default function DashboardPage() {
   const [displayMetrics, setDisplayMetrics] = useState([])
   const [result, setResult] = useState<any>(null)
   const [analysisPresets, setAnalysisPresets] = useState([])
-  const [selectedPreset, setSelectedPreset] = useState<string | null>(null)
   const [selectedAnalysis, setSelectedAnalysis] = useState<any>(null)
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [rowLimit, setRowLimit] = useState("10")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isCleaning, setIsCleaning] = useState(false)
   const [filterValue, setFilterValue] = useState<string | null>(null)
+  const [isTranslated, setIsTranslated] = useState(false);
+  const [isSanitized, setIsSanitized] = useState(false);
 
-  // ⭐️ [신규] 필터 해제 핸들러
+  const displayHeaders = useMemo(() => {
+    const targetHeaders = result?.headers || uploadedData?.headers || [];
+    if (!targetHeaders.length) return [];
+    return isTranslated ? targetHeaders.map((h: string) => smartTranslate(h)) : targetHeaders;
+  }, [result?.headers, uploadedData?.headers, isTranslated]);
+
+  const translatedResult = useMemo(() => {
+    if (!result) return null;
+    return { ...result, headers: displayHeaders };
+  }, [result, displayHeaders]);
+
+  const translatedUploadedData = useMemo(() => {
+    if (!uploadedData) return null;
+    return { ...uploadedData, headers: displayHeaders };
+  }, [uploadedData, displayHeaders]);
+
   const clearFilter = () => setFilterValue(null);
+
+  const sanitizeRawData = useCallback((rawData: any) => {
+    if (!rawData || !rawData.headers) return null;
+    const cleanHeaders = rawData.headers.map((h: string, i: number) => {
+      const trimmed = String(h || "").trim().replace(/^["']|["']$/g, '');
+      return trimmed === "" ? `column_${i}` : trimmed;
+    });
+    const cleanRows = (rawData.preview_rows || [])
+      .map((row: any) => {
+        const rowArray = Array.isArray(row) ? row : cleanHeaders.map(h => row[h]);
+        return cleanHeaders.map((_, i) => {
+          const cell = rowArray[i];
+          if (cell === null || cell === undefined || String(cell).trim() === "") return "0"; 
+          return String(cell).trim().replace(/^["'“”‘’]|["'“”‘’]$/g, '').replace(/[\x00-\x1F\x7F-\x9F]/g, "");
+        });
+      })
+      .filter((row: string[]) => row.some(cell => cell !== "0" && cell !== ""));
+    return { ...rawData, headers: cleanHeaders, preview_rows: cleanRows };
+  }, []);
 
   useEffect(() => {
     setIsClient(true)
     try {
       const savedResult = localStorage.getItem('dash_result')
-      const savedMetrics = localStorage.getItem('dash_metrics')
-      const savedPresets = localStorage.getItem('dash_presets')
-      const savedFileName = localStorage.getItem('dash_filename')
-
       if (savedResult && savedResult !== "undefined") {
-        const parsedResult = JSON.parse(savedResult)
-        if (parsedResult && parsedResult.headers) {
-          setResult(parsedResult)
-          if (savedMetrics) setDisplayMetrics(JSON.parse(savedMetrics))
-          if (savedPresets) setAnalysisPresets(JSON.parse(savedPresets))
-          if (savedFileName) setUploadedData({ name: savedFileName, headers: parsedResult.headers })
-        }
+        const parsed = JSON.parse(savedResult);
+        if (parsed && parsed.headers) setResult(parsed);
       }
-    } catch (e) {
-      localStorage.clear()
-    }
+    } catch (e) { localStorage.clear() }
   }, [])
 
   const handleReset = () => {
-    if (confirm("모든 데이터를 초기화할까요?")) {
-      localStorage.clear()
-      window.location.reload()
+    if (confirm("모든 분석 기록을 초기화할까요?")) {
+      localStorage.clear(); window.location.reload();
     }
   }
 
-  const analyzeFile = useCallback(async (file: File, targetColumn?: string, limit?: string) => {
-    setIsAnalyzing(true)
-    setResult(null) 
-    setSelectedAnalysis(null)
-    setFilterValue(null)
-    
-    const finalLimit = limit || rowLimit
-    if (!targetColumn) setSelectedPreset(null)
+  const handleExportCSV = useCallback(() => {
+    if (!result || !result.preview_rows) return;
+    const headers = displayHeaders.join(",");
+    const rows = result.preview_rows.map(row => 
+      row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")
+    ).join("\n");
+    const csvContent = "\uFEFF" + headers + "\n" + rows;
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Analysis_Report_${new Date().getTime()}.csv`);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  }, [result, displayHeaders]);
 
+  const analyzeFile = useCallback(async (file: File, targetColumn?: string, limit?: string) => {
+    setIsAnalyzing(true); setIsSanitized(false); setResult(null); 
+    setFilterValue(null); setSelectedAnalysis(null);
+    const finalLimit = limit || rowLimit;
     try {
       const formData = new FormData()
       formData.append("file", file)
-      if (targetColumn) formData.append("target_column", targetColumn)
       formData.append("row_limit", finalLimit)
-
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://data-viewer-zyxg.onrender.com'}/analyze`, {
-        method: "POST",
-        body: formData,
-      })
-
-      if (!response.ok) throw new Error("Analysis failed")
-      const data = await response.json()
-      
+        method: "POST", body: formData,
+      });
+      if (!response.ok) throw new Error(`서버 응답 오류 (${response.status})`);
+      const data = await response.json();
+      const sanitizedResult = sanitizeRawData(data.result);
+      if (!sanitizedResult) throw new Error("데이터 파싱 실패");
       setDisplayMetrics(data.display_metrics || [])
-      setResult(data.result)
-      if (data.analysis_presets) setAnalysisPresets(data.analysis_presets)
-      
-      localStorage.setItem('dash_metrics', JSON.stringify(data.display_metrics))
-      localStorage.setItem('dash_result', JSON.stringify(data.result))
-      localStorage.setItem('dash_presets', JSON.stringify(data.analysis_presets))
-      localStorage.setItem('dash_filename', file.name)
-
-      if (targetColumn) {
-        setSelectedPreset(targetColumn)
-        const preset = data.analysis_presets?.find((p: any) => p.column === targetColumn)
-        setSelectedAnalysis(preset || null)
-      }
-    } catch (error) {
-      console.error("분석 오류:", error)
-    } finally {
-      setIsAnalyzing(false)
-    }
-  }, [rowLimit])
+      setResult(sanitizedResult)
+      setIsSanitized(true)
+      setUploadedData({
+        headers: sanitizedResult.headers,
+        rows: sanitizedResult.preview_rows.slice(0, 10),
+        fileName: file.name
+      });
+      localStorage.setItem('dash_result', JSON.stringify(sanitizedResult));
+      localStorage.setItem('dash_filename', file.name);
+      if (data.analysis_presets?.length > 0) setSelectedAnalysis(data.analysis_presets[0])
+    } catch (error: any) {
+      const errorMsg = error.message.includes("fetch") 
+        ? "서버 연결에 실패했습니다 (CORS 문제)." 
+        : error.message;
+      alert(`파일 로드 실패: ${errorMsg}`);
+    } finally { setIsAnalyzing(false) }
+  }, [rowLimit, sanitizeRawData])
 
   const handleCleanData = async () => {
-    if (!currentFile) {
-        alert("파일 객체가 없습니다. 파일을 다시 업로드해 주세요.")
-        return
-    }
+    if (!currentFile) return
     setIsCleaning(true)
     try {
       const formData = new FormData()
       formData.append("file", currentFile)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://data-viewer-zyxg.onrender.com'}/clean`, {
-        method: "POST",
-        body: formData,
-      })
+        method: "POST", body: formData
+      });
       const data = await response.json()
-      alert(`✨ 정제 완료! (중복 ${data.removed_duplicates}건, 결측치 ${data.fixed_missing}건)`)
       const cleanedFile = new File([data.cleaned_data], currentFile.name, { type: "text/csv" })
-      setCurrentFile(cleanedFile)
-      analyzeFile(cleanedFile)
-    } catch (error) {
-      console.error("정제 실패:", error)
-    } finally { setIsCleaning(false) }
-  }
-
-  const handleRowLimitChange = async (value: string) => {
-    setRowLimit(value)
-    if (currentFile) {
-      await analyzeFile(currentFile, selectedPreset || undefined, value)
-    }
+      setCurrentFile(cleanedFile); analyzeFile(cleanedFile);
+    } catch (error) { console.error(error) } finally { setIsCleaning(false) }
   }
 
   if (!isClient) return <div className="min-h-screen bg-white" />
 
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="flex min-h-screen bg-white text-left">
       <Sidebar />
       <main className="flex-1 overflow-auto bg-slate-50/50">
         <div className="mx-auto max-w-[1400px] px-12 py-10">
           <div className="space-y-10">
-            <div className="flex justify-between items-end bg-white p-8 rounded-[32px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-                <div className="flex-1">
-                    <h1 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-3 tracking-tight">
+            {/* Header 섹션 */}
+            <header className="flex justify-between items-center bg-white p-8 rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white">
+                <div className="flex-1 text-left">
+                    <div className="flex items-center gap-3 mb-2 justify-start">
                         <LayoutDashboard className="w-7 h-7 text-primary" />
-                        인텔리전트 데이터 대시보드
-                    </h1>
+                        <h1 className="text-2xl font-bold text-slate-900 tracking-tight text-left">인텔리전트 데이터 분석 플랫폼</h1>
+                        {isSanitized && (
+                          <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-black uppercase tracking-wider">Auto-Sanitized</span>
+                          </div>
+                        )}
+                    </div>
                     <FileUploadZone 
                         onDataUploaded={setUploadedData} 
                         onFileSelected={(file) => { setCurrentFile(file); analyzeFile(file); }} 
                     />
                 </div>
                 {result && (
-                    <Button variant="ghost" size="sm" onClick={handleReset} className="mb-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all">
-                        <Trash2 className="w-4 h-4 mr-2" /> 기록 초기화
-                    </Button>
+                  <div className="flex items-center gap-3 ml-8">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button className="rounded-2xl bg-slate-900 hover:bg-slate-800 text-white px-6 py-6 shadow-xl flex items-center gap-2">
+                          <Download className="w-4 h-4" /> <span className="font-bold">내보내기</span> <ChevronDown className="w-3 h-3 opacity-50" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="rounded-2xl p-2 border-slate-100 shadow-2xl min-w-[200px] bg-white">
+                        <DropdownMenuItem onClick={handleExportCSV} className="rounded-xl p-3 cursor-pointer hover:bg-slate-50">
+                          <div className="flex items-center gap-3 text-left font-bold">
+                            <div className="p-2 bg-emerald-50 rounded-lg"><FileText className="w-4 h-4 text-emerald-600" /></div>
+                            <div><p className="text-xs">CSV 다운로드</p><p className="text-[10px] text-slate-400 font-medium">정제 완료 데이터</p></div>
+                          </div>
+                        </DropdownMenuItem>
+                        <div className="h-[1px] bg-slate-100 my-1" />
+                        <DropdownMenuItem onClick={handleReset} className="rounded-xl p-3 cursor-pointer hover:bg-red-50 text-red-600">
+                          <div className="flex items-center gap-3"><Trash2 className="w-4 h-4" /><p className="text-xs font-bold">기록 초기화</p></div>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 )}
-            </div>
+            </header>
 
-            {isAnalyzing || isCleaning ? (
-              <div className="space-y-10 animate-pulse">
-                <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
-                  <div className="h-80 bg-slate-200 rounded-[32px]" />
-                  <div className="h-80 bg-slate-200 rounded-[32px]" />
-                </div>
-                <div className="grid grid-cols-4 gap-6">
-                  {[1, 2, 3, 4].map(i => <div key={i} className="h-40 bg-slate-200 rounded-[32px]" />)}
-                </div>
+            {isAnalyzing ? (
+              <div className="py-40 text-center space-y-6">
+                <Sparkles className="w-16 h-16 text-primary animate-pulse mx-auto" />
+                <p className="text-xl font-bold text-slate-800 text-left">데이터 수선 및 분석 중...</p>
               </div>
             ) : !result ? (
-              <div className="flex flex-col items-center justify-center py-40 bg-white rounded-[40px] border-2 border-dashed border-slate-200 shadow-sm transition-all hover:border-primary/20">
-                <div className="bg-primary/5 p-8 rounded-full mb-8">
-                    <FileBarChart2 className="w-14 h-14 text-primary animate-bounce" />
-                </div>
-                <h2 className="text-2xl font-bold text-slate-800 mb-3 tracking-tight">분석할 CSV 파일을 업로드해 주세요</h2>
-                <p className="text-slate-500 text-center max-w-sm leading-relaxed mb-10">AI 자동 데이터 정제 및 시각화 인사이트를 제공합니다.</p>
+              <div className="flex flex-col items-center justify-center py-40 bg-white rounded-[40px] border-2 border-dashed border-slate-200">
+                <FileBarChart2 className="w-14 h-14 text-slate-300 mb-6" />
+                <h2 className="text-xl font-bold text-slate-800">분석할 파일을 업로드해 주세요</h2>
               </div>
             ) : (
               <div className="space-y-10 animate-in fade-in slide-in-from-bottom-3 duration-1000">
-                <div className="grid gap-6 lg:grid-cols-[1fr_400px] items-stretch">
-                  <DataCleaningSection data={uploadedData} result={result} />
-                  <SmartInsightsPanel data={uploadedData} result={result} />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-4 bg-white p-5 rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-50">
-                  <Button onClick={handleCleanData} variant="outline" className="border-primary/20 text-primary font-bold rounded-xl px-8 hover:bg-primary/5">
-                    <Sparkles className="w-4 h-4 mr-2" /> 스마트 데이터 정제
-                  </Button>
-                  <div className="h-8 w-[1px] bg-slate-100 mx-2" />
-                  <div className="flex flex-wrap gap-2.5">
-                    {analysisPresets.map((preset: any) => (
-                      <Button
-                        key={preset.column}
-                        variant={selectedPreset === preset.column ? "default" : "secondary"}
-                        className="rounded-xl font-bold px-5"
-                        onClick={() => {
-                          if (selectedPreset !== preset.column) {
-                            if (currentFile) analyzeFile(currentFile, preset.column)
-                            else {
-                              setSelectedPreset(preset.column)
-                              setSelectedAnalysis(analysisPresets.find((p: any) => p.column === preset.column))
-                            }
-                          } else {
-                            setSelectedPreset(null); setSelectedAnalysis(null); setFilterValue(null);
-                          }
-                        }}
-                      >
-                        {preset.label}
-                      </Button>
-                    ))}
-                  </div>
-                  <div className="ml-auto flex items-center gap-3">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sampling</span>
-                    <Select value={rowLimit} onValueChange={handleRowLimitChange}>
-                      <SelectTrigger className="w-[140px] h-10 border-slate-100 rounded-xl font-bold text-slate-700">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="10">10개 샘플</SelectItem>
-                        <SelectItem value="50">50개 샘플</SelectItem>
-                        <SelectItem value="100">100개 샘플</SelectItem>
-                        <SelectItem value="all">전체 데이터</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
+                {/* 1. KPI 지표 섹션 */}
                 <KpiMetrics displayMetrics={displayMetrics} />
                 
-                {selectedAnalysis && (
-                  <div className="w-full min-h-[500px] bg-white p-10 rounded-[40px] shadow-[0_8px_40px_rgb(0,0,0,0.04)] animate-in zoom-in-95 duration-700 space-y-6">
-                    {/* ⭐️ 필터 알림 배지 추가 */}
+                {/* 2. 데이터 관리 섹션 (Full Width) */}
+                <section className="w-full">
+                  <DataCleaningSection 
+                    data={translatedUploadedData} 
+                    result={translatedResult} 
+                    isTranslated={isTranslated}
+                    setIsTranslated={setIsTranslated}
+                    onCleanData={handleCleanData}
+                    isCleaning={isCleaning} 
+                    rowLimit={rowLimit} 
+                    onRowLimitChange={(v) => analyzeFile(currentFile!, undefined, v)}
+                  />
+                </section>
+
+                {/* 3. 지능형 시각화 거울 (Full Width로 독립 확장) */}
+                <section className="space-y-6 w-full">
+                  <div className="flex items-center gap-3 px-2 justify-start">
+                    <Layout className="w-5 h-5 text-primary" />
+                    <h3 className="text-lg font-bold text-slate-900 text-left">지능형 시각화 거울</h3>
+                  </div>
+                  <div className="w-full min-h-[600px] bg-white p-10 rounded-[40px] shadow-[0_8px_40px_rgb(0,0,0,0.04)] border border-white relative text-left">
                     {filterValue && (
-                        <div className="flex items-center gap-3 px-4 py-2 bg-primary/5 border border-primary/10 rounded-2xl animate-in slide-in-from-top-2">
-                            <span className="text-xs font-bold text-primary tracking-tight">Active Chart Filter:</span>
-                            <span className="px-3 py-1 bg-primary text-white text-[10px] font-bold rounded-full">
-                                {selectedAnalysis.column} = {filterValue}
-                            </span>
-                            <button onClick={clearFilter} className="ml-auto text-slate-400 hover:text-primary transition-colors">
-                                <XCircle className="w-5 h-5" />
-                            </button>
+                        <div className="absolute top-10 right-10 flex items-center gap-3 px-4 py-2 bg-primary/5 border border-primary/10 rounded-2xl animate-in slide-in-from-top-2 z-10">
+                            <span className="text-xs font-bold text-primary tracking-tight">필터링 중: {filterValue}</span>
+                            <button onClick={clearFilter} className="text-slate-400 hover:text-primary"><XCircle className="w-4 h-4" /></button>
                         </div>
                     )}
                     <VisualInsight 
-                        selectedAnalysis={selectedAnalysis} 
-                        headers={result.headers} 
-                        previewRows={result.preview_rows} 
-                        onElementClick={setFilterValue} 
-                        activeFilter={filterValue} 
+                      headers={displayHeaders} 
+                      previewRows={result.preview_rows} 
+                      onElementClick={setFilterValue} 
+                      activeFilter={filterValue} 
                     />
                   </div>
-                )}
-                <div className="bg-white rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+                </section>
+
+                {/* 4. 스마트 인사이트 패널 (차트 하단 Full Width로 배치) */}
+                <section className="w-full">
+                  <SmartInsightsPanel data={translatedResult} result={translatedResult} />
+                </section>
+
+                {/* 5. 데이터 테이블 섹션 (Full Width) */}
+                <section className="bg-white rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden border border-slate-50 text-left w-full">
                     <DataTable 
-                        result={result} 
+                        result={translatedResult} 
                         filterColumn={selectedAnalysis?.column} 
                         filterValue={filterValue} 
                     />
-                </div>
+                </section>
               </div>
             )}
           </div>
