@@ -1,18 +1,31 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import pandas as pd
 import io
 import numpy as np
+import os
+from typing import Optional
 
 app = FastAPI()
 
+# ⭐️ CORS 보안 설정: 특정 도메인만 허용 (환경 변수로 관리)
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,https://data-viewer-zyxg.onrender.com"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[origin.strip() for origin in ALLOWED_ORIGINS],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+# ⭐️ 파일 업로드 제한 설정
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+ALLOWED_MIME_TYPES = ["text/csv", "application/vnd.ms-excel"]
 
 COLUMN_TRANSLATIONS = {
     'age': '나이', 'premium': '보험료', 'income': '소득', 'gender': '성별',
@@ -29,6 +42,24 @@ def translate_column_name(col_name: str) -> str:
     for key, value in COLUMN_TRANSLATIONS.items():
         if key in col_lower: return value
     return col_name
+
+def validate_file_upload(file: UploadFile) -> None:
+    """파일 업로드 검증 함수"""
+    # 파일 크기 검증
+    if file.size and file.size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"파일 크기가 너무 큽니다. 최대 {MAX_FILE_SIZE / (1024 * 1024):.0f}MB까지 업로드 가능합니다."
+        )
+    
+    # 파일 타입 검증 (MIME 타입 또는 확장자)
+    if file.content_type and file.content_type not in ALLOWED_MIME_TYPES:
+        # 확장자로도 체크 (MIME 타입이 없는 경우)
+        if not file.filename or not file.filename.lower().endswith('.csv'):
+            raise HTTPException(
+                status_code=400,
+                detail="CSV 파일만 업로드 가능합니다."
+            )
 
 def generate_insight(analysis_type: str, col: str, df: pd.DataFrame) -> str:
     try:
@@ -50,14 +81,36 @@ def generate_insight(analysis_type: str, col: str, df: pd.DataFrame) -> str:
             mean, std = df[col].mean(), df[col].std()
             outlier_count = len(df[np.abs(df[col] - mean) > (2 * std)])
             return f"평균에서 크게 벗어난 이상 데이터가 {outlier_count}건 발견되었습니다. 상세 확인이 필요합니다."
-    except:
+    except Exception as e:
+        # 구체적인 예외 처리
+        print(f"인사이트 생성 중 오류 발생: {str(e)}")
         return "데이터를 분석하는 중입니다."
     return ""
 
 @app.post("/clean")
 async def clean_data(file: UploadFile = File(...)):
-    contents = await file.read()
-    df = pd.read_csv(io.BytesIO(contents))
+    try:
+        # 파일 검증
+        validate_file_upload(file)
+        
+        # 파일 크기 재검증 (streaming 읽기 전)
+        contents = await file.read()
+        if len(contents) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"파일 크기가 너무 큽니다. 최대 {MAX_FILE_SIZE / (1024 * 1024):.0f}MB까지 업로드 가능합니다."
+            )
+        
+        df = pd.read_csv(io.BytesIO(contents))
+    except HTTPException:
+        raise
+    except pd.errors.EmptyDataError:
+        raise HTTPException(status_code=400, detail="파일이 비어있거나 올바른 CSV 형식이 아닙니다.")
+    except pd.errors.ParserError as e:
+        raise HTTPException(status_code=400, detail=f"CSV 파싱 오류: {str(e)}")
+    except Exception as e:
+        print(f"데이터 정제 중 오류 발생: {str(e)}")
+        raise HTTPException(status_code=500, detail="데이터 처리 중 오류가 발생했습니다.")
     
     original_len = len(df)
     df = df.drop_duplicates()
@@ -85,17 +138,39 @@ async def clean_data(file: UploadFile = File(...)):
 
 @app.post("/analyze")
 async def analyze_data(file: UploadFile = File(...), target_column: str = Form(None), row_limit: str = Form("10")):
-    contents = await file.read()
-    df = pd.read_csv(io.BytesIO(contents))
-    df.columns = df.columns.str.strip()
-    total_rows = len(df)
-    
-    if row_limit and str(row_limit).lower() != "all":
-        try:
-            limit_val = int(row_limit)
-            df = df.head(limit_val)
-        except:
-            df = df.head(10)
+    try:
+        # 파일 검증
+        validate_file_upload(file)
+        
+        # 파일 크기 재검증
+        contents = await file.read()
+        if len(contents) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"파일 크기가 너무 큽니다. 최대 {MAX_FILE_SIZE / (1024 * 1024):.0f}MB까지 업로드 가능합니다."
+            )
+        
+        df = pd.read_csv(io.BytesIO(contents))
+        df.columns = df.columns.str.strip()
+        total_rows = len(df)
+        
+        if row_limit and str(row_limit).lower() != "all":
+            try:
+                limit_val = int(row_limit)
+                if limit_val < 1:
+                    limit_val = 10
+                df = df.head(limit_val)
+            except (ValueError, TypeError):
+                df = df.head(10)
+    except HTTPException:
+        raise
+    except pd.errors.EmptyDataError:
+        raise HTTPException(status_code=400, detail="파일이 비어있거나 올바른 CSV 형식이 아닙니다.")
+    except pd.errors.ParserError as e:
+        raise HTTPException(status_code=400, detail=f"CSV 파싱 오류: {str(e)}")
+    except Exception as e:
+        print(f"데이터 분석 중 오류 발생: {str(e)}")
+        raise HTTPException(status_code=500, detail="데이터 분석 중 오류가 발생했습니다.")
 
     # ⭐️ 지표 계산 로직 변경 (Sum -> Mean)
     numeric_columns = df.select_dtypes(include=['number']).columns.tolist()

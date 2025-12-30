@@ -14,8 +14,8 @@ import {
   ResponsiveContainer, Tooltip, Legend,
 } from "recharts"
 import { 
-  Sparkles, BarChart3, TrendingUp, AlertCircle, 
-  CheckCircle2, Info, ArrowUpRight, ArrowDownRight
+  Sparkles, BarChart3, Tags, Fingerprint, PieChart as PieIcon, 
+  SortAsc, SortDesc, HelpCircle, CheckCircle2 
 } from "lucide-react"
 
 interface VisualInsightProps {
@@ -26,8 +26,9 @@ interface VisualInsightProps {
 }
 
 const COLORS = [
-  "#0066FF", "#00A3FF", "#4D9EFF", "#7AB8FF",
-  "#0052CC", "#003D99", "#002966", "#1A4DFF",
+  "hsl(217, 91%, 60%)", "hsl(142, 76%, 36%)", "hsl(38, 92%, 50%)",
+  "hsl(0, 72%, 51%)", "hsl(262, 83%, 58%)", "hsl(201, 96%, 32%)",
+  "hsl(24, 95%, 53%)", "hsl(280, 67%, 64%)",
 ]
 
 const parseToNumeric = (val: any): number => {
@@ -41,18 +42,33 @@ const parseToNumeric = (val: any): number => {
   return isPercentage ? num / 100 : num;
 };
 
+const TYPE_BASED_GUIDES = {
+  categorical: [
+    "각 그룹 간의 수치 격차가 전략적으로 중요한 의미를 갖나요?",
+    "상위 항목들이 전체 결과의 대부분을 점유하고 있지는 않은지 확인해보세요.",
+    "그룹의 개수가 너무 많다면 유사한 항목끼리 묶어서 분석이 필요할 수 있습니다."
+  ],
+  default: [
+    "이 데이터가 비즈니스 의사결정에 어떤 직접적인 힌트를 주나요?",
+    "이상치(Outlier)를 제외했을 때 결과가 드라마틱하게 변하는지 체크해보세요."
+  ]
+};
+
 export function VisualInsight({ headers, previewRows, onElementClick, activeFilter }: VisualInsightProps) {
   const [xAxis, setXAxis] = useState<string>("")
   const [yAxis, setYAxis] = useState<string>("")
   const [aggType, setAggType] = useState<"avg" | "sum">("avg")
   const [chartType, setChartType] = useState<"bar" | "pie">("bar")
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc")
 
+  // ⭐️ [해결 1] 번역된 헤더를 기반으로 변수 타입을 재분류
   const columnTypes = useMemo(() => {
     const numeric: string[] = []
     const categorical: string[] = []
     const identifiers: string[] = []
 
     headers.forEach((header, idx) => {
+      // previewRows는 원본 데이터이므로 idx를 통해 직접 접근
       const sample = previewRows.slice(0, 50).map(row => row[idx]).filter(v => v !== null && v !== "");
       
       const isNumeric = sample.length > 0 && sample.every(val => {
@@ -75,8 +91,10 @@ export function VisualInsight({ headers, previewRows, onElementClick, activeFilt
     return { numeric, categorical, identifiers, recommendedX: categorical[0] || headers[0] }
   }, [headers, previewRows])
 
+  // ⭐️ [해결 2] 번역 상태(headers)가 바뀔 때 선택된 축 이름도 번역된 이름으로 강제 업데이트
   useEffect(() => {
     if (headers.length > 0) {
+      // 현재 xAxis가 headers 리스트에 없다면(언어가 바뀌었다면) 추천값으로 초기화
       if (!headers.includes(xAxis)) setXAxis(columnTypes.recommendedX);
       if (!headers.includes(yAxis)) setYAxis(columnTypes.numeric[0] || "");
     }
@@ -102,227 +120,95 @@ export function VisualInsight({ headers, previewRows, onElementClick, activeFilt
       .map(([name, stat]) => ({
         name, value: aggType === "avg" ? Number((stat.total / (stat.count || 1)).toFixed(2)) : stat.total
       }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 8) 
-  }, [xAxis, yAxis, aggType, headers, previewRows])
+      .sort((a, b) => sortOrder === "desc" ? b.value - a.value : a.value - b.value)
+      .slice(0, 10) 
+  }, [xAxis, yAxis, aggType, headers, previewRows, sortOrder])
 
-  // AI 인사이트 생성
-  const insights = useMemo(() => {
-    if (chartData.length === 0) return []
-    
-    const insights = []
-    const topItem = chartData[0]
-    const total = chartData.reduce((sum, item) => sum + item.value, 0)
-    const topPercentage = ((topItem.value / total) * 100).toFixed(1)
-    
-    // 주요 인사이트
-    insights.push({
-      type: "primary",
-      icon: TrendingUp,
-      title: "주요 발견",
-      value: `${topItem.name}`,
-      description: `전체의 ${topPercentage}%를 차지하며 가장 높은 비중을 보입니다.`,
-      trend: "up"
-    })
-
-    // 통계 인사이트
-    if (chartData.length > 1) {
-      const avg = total / chartData.length
-      const aboveAvg = chartData.filter(item => item.value > avg).length
-      insights.push({
-        type: "stat",
-        icon: BarChart3,
-        title: "평균 대비",
-        value: `${aboveAvg}개 항목`,
-        description: `평균값(${avg.toFixed(1)})을 초과하는 항목입니다.`,
-        trend: aboveAvg > chartData.length / 2 ? "up" : "down"
-      })
-    }
-
-    // 데이터 품질 인사이트
-    if (previewRows.length > 0) {
-      insights.push({
-        type: "quality",
-        icon: CheckCircle2,
-        title: "데이터 품질",
-        value: `${chartData.length}개 그룹`,
-        description: `${previewRows.length}개 행에서 분석된 결과입니다.`,
-        trend: "neutral"
-      })
-    }
-
-    return insights
-  }, [chartData, previewRows])
+  const currentGuides = useMemo(() => columnTypes.categorical.includes(xAxis) ? TYPE_BASED_GUIDES.categorical : TYPE_BASED_GUIDES.default, [xAxis, columnTypes]);
 
   return (
-    <Card className="rounded-2xl border border-[#E5E9F0] bg-white p-8 shadow-sm">
-      <div className="space-y-6">
-        {/* 헤더 */}
-        <div className="flex items-center justify-between">
+    <Card className="glass-card rounded-3xl p-10">
+      <div className="space-y-10">
+        <div className="flex flex-wrap items-center gap-6 p-6 bg-slate-50/50 rounded-[32px] border border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#0066FF]/10 rounded-xl flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-[#0066FF]" />
+            <div className="bg-white p-2.5 rounded-xl shadow-sm"><Tags className="w-4 h-4 text-primary" /></div>
+            <div className="space-y-0.5 text-left">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-left">그룹화 기준 (X)</p>
+              <Select value={xAxis} onValueChange={setXAxis}>
+                <SelectTrigger className="w-[180px] h-9 border-none bg-transparent shadow-none font-bold text-slate-800 p-0 focus:ring-0 text-left">
+                  <SelectValue placeholder="항목 선택" />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl border-slate-100 text-left">
+                  {columnTypes.categorical.map(col => (
+                    <SelectItem key={col} value={col} className="rounded-xl font-medium text-left">
+                      <span className="flex items-center gap-2"><span className="text-[9px] bg-emerald-50 text-emerald-500 px-1.5 py-0.5 rounded font-bold">가</span>{col}</span>
+                    </SelectItem>
+                  ))}
+                  {columnTypes.identifiers.map(col => (
+                    <SelectItem key={col} value={col} className="rounded-xl font-medium opacity-60 text-left">
+                      <span className="flex items-center gap-2"><Fingerprint className="w-3 h-3 text-slate-300" />{col}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-[#1A1F36]">데이터 요약 분석</h3>
-              <p className="text-xs text-[#6B7280] mt-0.5">AI 기반 핵심 인사이트</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="bg-white p-2.5 rounded-xl shadow-sm"><BarChart3 className="w-4 h-4 text-primary" /></div>
+            <div className="space-y-0.5 text-left">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-left">측정 지표 (Y)</p>
+              <Select value={yAxis} onValueChange={setYAxis}>
+                <SelectTrigger className="w-[180px] h-9 border-none bg-transparent shadow-none font-bold text-slate-800 p-0 focus:ring-0 text-left">
+                  <SelectValue placeholder="수치 선택" />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl border-slate-100 text-left">
+                  {columnTypes.numeric.map(col => (
+                    <SelectItem key={col} value={col} className="rounded-xl font-medium text-left">
+                      <span className="flex items-center gap-2"><span className="text-[9px] bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded font-bold">#</span>{col}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-2xl shadow-sm border border-slate-50">
+            <button onClick={() => setChartType("bar")} className={`p-2 rounded-xl transition-all ${chartType === "bar" ? "bg-primary text-white shadow-md" : "text-slate-300 hover:text-slate-500"}`}><BarChart3 className="w-4 h-4" /></button>
+            <button onClick={() => setChartType("pie")} className={`p-2 rounded-xl transition-all ${chartType === "pie" ? "bg-primary text-white shadow-md" : "text-slate-300 hover:text-slate-500"}`}><PieIcon className="w-4 h-4" /></button>
           </div>
         </div>
 
-        {/* AI 인사이트 카드 그리드 */}
-        {insights.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {insights.map((insight, idx) => {
-              const Icon = insight.icon
-              return (
-                <div
-                  key={idx}
-                  className="bg-gradient-to-br from-white to-[#F7F9FC] p-5 rounded-xl border border-[#E5E9F0] hover:border-[#0066FF]/30 transition-all hover:shadow-md"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="w-8 h-8 bg-[#0066FF]/10 rounded-lg flex items-center justify-center">
-                      <Icon className="w-4 h-4 text-[#0066FF]" />
-                    </div>
-                    {insight.trend === "up" && <ArrowUpRight className="w-4 h-4 text-[#10B981]" />}
-                    {insight.trend === "down" && <ArrowDownRight className="w-4 h-4 text-[#EF4444]" />}
-                    {insight.trend === "neutral" && <Info className="w-4 h-4 text-[#6B7280]" />}
-                  </div>
-                  <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-1">
-                    {insight.title}
-                  </p>
-                  <p className="text-lg font-semibold text-[#1A1F36] mb-2">
-                    {insight.value}
-                  </p>
-                  <p className="text-xs text-[#6B7280] leading-relaxed">
-                    {insight.description}
-                  </p>
-                </div>
-              )
-            })}
-          </div>
-        )}
+        <div className="grid lg:grid-cols-[1fr_320px] gap-8 min-h-[500px]">
+          <div className="space-y-8 flex flex-col min-w-0">
+            <div className="bg-blue-50/40 border border-blue-100/50 rounded-[32px] p-8 flex items-start gap-5 text-left">
+              <div className="bg-blue-500/10 p-3 rounded-2xl text-left"><Sparkles className="w-6 h-6 text-blue-600" /></div>
+              <div className="space-y-1.5 text-left">
+                <p className="text-[11px] font-black text-blue-400 uppercase tracking-[0.2em] text-left">Insight Discovery</p>
+                <h4 className="text-xl font-bold text-slate-900 leading-tight text-left">{xAxis} 기반 시각화 분석</h4>
+                <p className="text-sm text-slate-500 font-medium leading-relaxed text-left">언어 설정을 반영하여 실시간으로 차트 레이블을 재매핑했습니다.</p>
+              </div>
+            </div>
 
-        {/* 차트 컨트롤 */}
-        <div className="flex flex-wrap items-center gap-4 p-4 bg-[#F7F9FC] rounded-xl border border-[#E5E9F0]">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-[#0066FF]" />
-            <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide">그룹화</p>
-            <Select value={xAxis} onValueChange={setXAxis}>
-              <SelectTrigger className="w-[160px] h-8 border-[#E5E9F0] bg-white text-sm font-medium">
-                <SelectValue placeholder="항목 선택" />
-              </SelectTrigger>
-              <SelectContent>
-                {columnTypes.categorical.map(col => (
-                  <SelectItem key={col} value={col}>{col}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-[#0066FF]" />
-            <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide">측정값</p>
-            <Select value={yAxis} onValueChange={setYAxis}>
-              <SelectTrigger className="w-[160px] h-8 border-[#E5E9F0] bg-white text-sm font-medium">
-                <SelectValue placeholder="수치 선택" />
-              </SelectTrigger>
-              <SelectContent>
-                {columnTypes.numeric.map(col => (
-                  <SelectItem key={col} value={col}>{col}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={() => setChartType("bar")}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                chartType === "bar"
-                  ? "bg-[#0066FF] text-white shadow-sm"
-                  : "bg-white text-[#6B7280] border border-[#E5E9F0] hover:bg-[#F7F9FC]"
-              }`}
-            >
-              막대
-            </button>
-            <button
-              onClick={() => setChartType("pie")}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                chartType === "pie"
-                  ? "bg-[#0066FF] text-white shadow-sm"
-                  : "bg-white text-[#6B7280] border border-[#E5E9F0] hover:bg-[#F7F9FC]"
-              }`}
-            >
-              원형
-            </button>
-          </div>
-        </div>
-
-        {/* 차트 영역 */}
-        <div className="bg-[#F7F9FC] rounded-xl p-6 border border-[#E5E9F0]">
-          {chartData.length > 0 ? (
-            <div className="h-[400px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[450px] w-full bg-slate-50/30 rounded-[32px] p-8 border border-slate-50 relative">
+              <ResponsiveContainer width="100%" height="100%" key={headers.join(',') + chartType}>
                 {chartType === "pie" ? (
                   <PieChart>
-                    <Pie
-                      data={chartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={120}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
+                    <Pie data={chartData} cx="50%" cy="50%" innerRadius={80} outerRadius={140} paddingAngle={5} dataKey="value">
                       {chartData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: '12px',
-                        border: '1px solid #E5E9F0',
-                        backgroundColor: 'white',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                      }}
-                    />
-                    <Legend
-                      verticalAlign="bottom"
-                      height={36}
-                      iconType="circle"
-                      wrapperStyle={{ fontSize: '12px', color: '#6B7280' }}
-                    />
+                    <Tooltip contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }} />
+                    <Legend verticalAlign="bottom" height={36} />
                   </PieChart>
                 ) : (
                   <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E9F0" opacity={0.5} />
-                    <XAxis
-                      dataKey="name"
-                      fontSize={12}
-                      fontWeight={500}
-                      tick={{ fill: "#6B7280" }}
-                      axisLine={false}
-                      tickLine={false}
-                      dy={10}
-                    />
-                    <YAxis
-                      fontSize={12}
-                      fontWeight={500}
-                      tick={{ fill: "#6B7280" }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      cursor={{ fill: '#F7F9FC', radius: 8 }}
-                      contentStyle={{
-                        borderRadius: '12px',
-                        border: '1px solid #E5E9F0',
-                        backgroundColor: 'white',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                      }}
-                    />
-                    <Bar dataKey="value" radius={[8, 8, 0, 0]} fill="#0066FF">
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.5} />
+                    <XAxis dataKey="name" fontSize={11} fontWeight={700} tick={{ fill: "#94a3b8" }} axisLine={false} tickLine={false} dy={10} />
+                    <YAxis fontSize={11} fontWeight={700} tick={{ fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: '#f1f5f9', radius: 12 }} contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }} />
+                    <Bar dataKey="value" radius={[12, 12, 12, 12]} barSize={40}>
                       {chartData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
@@ -330,15 +216,28 @@ export function VisualInsight({ headers, previewRows, onElementClick, activeFilt
                   </BarChart>
                 )}
               </ResponsiveContainer>
+              {chartData.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center text-slate-300 font-bold text-left">유효한 수치 데이터를 선택해주세요.</div>
+              )}
             </div>
-          ) : (
-            <div className="h-[400px] flex items-center justify-center text-[#6B7280]">
-              <div className="text-center">
-                <AlertCircle className="w-12 h-12 text-[#9CA3AF] mx-auto mb-3" />
-                <p className="text-sm font-medium">유효한 데이터를 선택해주세요</p>
-              </div>
+          </div>
+
+          <div className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.02)] flex flex-col h-full text-left">
+            <div className="flex items-center gap-2 mb-8 text-slate-900 text-left font-bold">
+              <HelpCircle className="w-5 h-5 text-primary text-left" />
+              분석 가이드
             </div>
-          )}
+            <div className="space-y-5 flex-1 text-left">
+              {currentGuides.map((guide, idx) => (
+                <div key={idx} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-50 text-left">
+                  <div className="flex gap-3 text-left">
+                    <CheckCircle2 className="w-4 h-4 text-slate-200 shrink-0 mt-0.5 text-left" />
+                    <p className="text-[12px] text-slate-600 font-semibold leading-relaxed text-left">{guide}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </Card>

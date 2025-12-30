@@ -9,8 +9,9 @@ import { SmartInsightsPanel } from "@/components/smart-insights-panel"
 import { VisualInsight } from "@/components/visual-insight"
 import { Button } from "@/components/ui/button"
 import { useState, useEffect, useCallback, useMemo } from "react"
-// ⭐️ [변경] Gemini 대신 GPT 서비스 임포트
 import { generateDataInsight } from "@/lib/gemini"
+import { useToast } from "@/hooks/use-toast"
+import { motion } from "framer-motion"
 import { 
   Trash2, 
   LayoutDashboard, 
@@ -53,11 +54,32 @@ const smartTranslate = (header: string): string => {
   return header;
 };
 
+// 타입 정의
+interface UploadedData {
+  headers: string[];
+  rows: string[][];
+  fileName: string;
+}
+
+interface DataResult {
+  headers: string[];
+  preview_rows: string[][];
+  total_rows?: number;
+}
+
+interface DisplayMetric {
+  label: string;
+  value: number;
+  unit: string;
+  feature: string | null;
+}
+
 export default function DashboardPage() {
+  const { toast } = useToast();
   const [isClient, setIsClient] = useState(false)
-  const [uploadedData, setUploadedData] = useState<any>(null)
-  const [displayMetrics, setDisplayMetrics] = useState([])
-  const [result, setResult] = useState<any>(null)
+  const [uploadedData, setUploadedData] = useState<UploadedData | null>(null)
+  const [displayMetrics, setDisplayMetrics] = useState<DisplayMetric[]>([])
+  const [result, setResult] = useState<DataResult | null>(null)
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [rowLimit, setRowLimit] = useState("10")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -85,16 +107,28 @@ export default function DashboardPage() {
 
   const clearFilter = () => setFilterValue(null);
 
-  const sanitizeRawData = useCallback((rawData: any) => {
-    if (!rawData || !rawData.headers) return null;
-    const cleanHeaders = rawData.headers.map((h: string) => String(h || "").trim().replace(/^["']|["']$/g, '') || "column");
-    const cleanRows = (rawData.preview_rows || [])
-      .map((row: any) => {
-        const rowArray = Array.isArray(row) ? row : cleanHeaders.map((h: string) => row[h]);
-        return cleanHeaders.map((_: string, i: number) => String(rowArray[i] || "").trim().replace(/[\x00-\x1F\x7F-\x9F]/g, ""));
+  const sanitizeRawData = useCallback((rawData: unknown): DataResult | null => {
+    if (!rawData || typeof rawData !== 'object') return null;
+    const data = rawData as { headers?: unknown; preview_rows?: unknown };
+    
+    if (!data.headers || !Array.isArray(data.headers)) return null;
+    
+    const cleanHeaders = (data.headers as unknown[]).map((h: unknown) => 
+      String(h || "").trim().replace(/^["']|["']$/g, '') || "column"
+    );
+    
+    if (!data.preview_rows || !Array.isArray(data.preview_rows)) {
+      return { ...data, headers: cleanHeaders, preview_rows: [] } as DataResult;
+    }
+    
+    const cleanRows = (data.preview_rows as unknown[])
+      .map((row: unknown) => {
+        const rowArray = Array.isArray(row) ? row : cleanHeaders.map(() => null);
+        return cleanHeaders.map((_, i) => String(rowArray[i] || "").trim().replace(/[\x00-\x1F\x7F-\x9F]/g, ""));
       })
       .filter((row: string[]) => row.some(cell => cell !== ""));
-    return { ...rawData, headers: cleanHeaders, preview_rows: cleanRows };
+      
+    return { ...data, headers: cleanHeaders, preview_rows: cleanRows } as DataResult;
   }, []);
 
   const analyzeFile = useCallback(async (file: File, targetColumn?: string, limit?: string) => {
@@ -106,103 +140,227 @@ export default function DashboardPage() {
       const formData = new FormData()
       formData.append("file", file)
       formData.append("row_limit", finalLimit)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/analyze`, {
-        method: "POST", body: formData,
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://data-viewer-zyxg.onrender.com';
+      const response = await fetch(`${apiUrl}/analyze`, {
+        method: "POST", 
+        body: formData,
       });
       
-      const data = await response.json();
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: '알 수 없는 오류' }));
+        throw new Error(errorData.error || `서버 오류 (${response.status})`);
+      }
+      
+      const data = await response.json() as { 
+        result?: unknown; 
+        display_metrics?: DisplayMetric[];
+      };
+      
       const sanitizedResult = sanitizeRawData(data.result);
       
       if (sanitizedResult) {
         setResult(sanitizedResult)
         setDisplayMetrics(data.display_metrics || [])
         setIsSanitized(true)
-        setUploadedData({ headers: sanitizedResult.headers, rows: sanitizedResult.preview_rows.slice(0, 10), fileName: file.name });
+        setUploadedData({ 
+          headers: sanitizedResult.headers, 
+          rows: sanitizedResult.preview_rows.slice(0, 10), 
+          fileName: file.name 
+        });
         
-        // ✨ [GPT 연동] 데이터 로드 후 GPT 인사이트 호출
+        // ✨ [AI 인사이트] 데이터 로드 후 AI 인사이트 호출
         try {
           const insight = await generateDataInsight(sanitizedResult.headers, sanitizedResult.preview_rows);
           setAiInsight(insight);
         } catch (aiError) {
-          console.error("GPT Insight Failed", aiError);
+          // AI 인사이트 실패는 사용자에게 알리지 않음 (선택적 기능)
+          console.error("AI 인사이트 생성 실패:", aiError);
         }
 
-        localStorage.setItem('dash_result', JSON.stringify(sanitizedResult));
-        localStorage.setItem('dash_filename', file.name);
+        // localStorage에 저장 (선택적 기능)
+        try {
+          localStorage.setItem('dash_result', JSON.stringify(sanitizedResult));
+          localStorage.setItem('dash_filename', file.name);
+        } catch (storageError) {
+          console.warn("localStorage 저장 실패:", storageError);
+        }
+
+        toast({
+          title: "파일 분석 완료",
+          description: "데이터 분석이 성공적으로 완료되었습니다.",
+        });
+      } else {
+        throw new Error('데이터 파싱에 실패했습니다.');
       }
-    } catch (error) { 
-      alert("파일 로드 실패"); 
-    } finally { setIsAnalyzing(false) }
-  }, [rowLimit, sanitizeRawData])
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
+      console.error("파일 분석 실패:", error);
+      
+      toast({
+        title: "파일 분석 실패",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally { 
+      setIsAnalyzing(false);
+    }
+  }, [rowLimit, sanitizeRawData, toast])
 
   useEffect(() => { setIsClient(true) }, [])
 
   if (!isClient) return <div className="min-h-screen bg-white" />
 
   return (
-    <div className="flex min-h-screen bg-white text-left font-sans">
+    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 text-left font-sans">
       <Sidebar />
-      <main className="flex-1 overflow-auto bg-[#F7F9FC]">
-        <div className="mx-auto max-w-[1400px] px-12 py-10">
-          <div className="space-y-8">
-            <header className="flex justify-between items-center bg-white p-8 rounded-2xl shadow-sm border border-[#E5E9F0]">
-                <div className="flex-1 text-left">
-                    <div className="flex items-center gap-3 mb-4 justify-start">
-                        <LayoutDashboard className="w-6 h-6 text-[#0066FF]" />
-                        <h1 className="text-2xl font-semibold text-[#1A1F36] tracking-tight text-left">데이터 분석 대시보드</h1>
-                    </div>
-                    <FileUploadZone onDataUploaded={setUploadedData} onFileSelected={(file) => { setCurrentFile(file); analyzeFile(file); }} />
+      <main className="flex-1 overflow-auto">
+        <div className="mx-auto max-w-[1600px] px-8 py-12">
+          {/* Header Section */}
+          <motion.header
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            className="mb-12"
+          >
+            <div className="glass-card rounded-3xl p-10 glass-card-hover">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center border border-primary/10">
+                  <LayoutDashboard className="w-6 h-6 text-primary" />
                 </div>
-            </header>
+                <div>
+                  <h1 className="text-4xl font-bold text-slate-900 tracking-tight leading-tight mb-1">
+                    인텔리전트 데이터 분석
+                  </h1>
+                  <p className="text-base text-slate-500 font-medium tracking-wide">
+                    AI 기반 실시간 데이터 인사이트 플랫폼
+                  </p>
+                </div>
+              </div>
+              <FileUploadZone 
+                onDataUploaded={setUploadedData} 
+                onFileSelected={(file) => { setCurrentFile(file); analyzeFile(file); }} 
+              />
+            </div>
+          </motion.header>
 
             {isAnalyzing ? (
-              <div className="py-40 text-center space-y-6">
-                <Sparkles className="w-16 h-16 text-[#0066FF] animate-pulse mx-auto" />
-                <p className="text-xl font-semibold text-[#1A1F36]">데이터 분석 및 AI 인사이트 생성 중...</p>
-              </div>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5 }}
+                className="py-40 text-center space-y-6"
+              >
+                <Sparkles className="w-16 h-16 text-primary animate-pulse mx-auto" />
+                <p className="text-2xl font-bold text-slate-800 tracking-tight">데이터 분석 및 AI 인사이트 생성 중...</p>
+              </motion.div>
             ) : result && (
-              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-3 duration-1000">
-                <KpiMetrics displayMetrics={displayMetrics} />
-                
-                {/* AI 요약 카드 */}
-                {aiInsight && (
-                  <section className="w-full bg-gradient-to-r from-[#0066FF] to-[#0052CC] text-white p-8 rounded-2xl shadow-lg flex items-center gap-6 animate-in zoom-in-95 duration-700">
-                    <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                      <Sparkles className="w-7 h-7 text-white" />
-                    </div>
-                    <div className="text-left flex-1">
-                      <p className="text-xs font-semibold text-white/80 uppercase tracking-wider mb-2">AI 데이터 인사이트</p>
-                      <h3 className="text-lg font-semibold leading-relaxed text-white">"{aiInsight.trim()}"</h3>
-                    </div>
-                  </section>
-                )}
+              <div className="space-y-6">
+                {/* Bento Grid Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* KPI Metrics - Full Width */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+                    className="lg:col-span-12"
+                  >
+                    <KpiMetrics displayMetrics={displayMetrics} />
+                  </motion.div>
 
-                <section className="w-full">
-                  <DataCleaningSection 
-                    data={translatedUploadedData} result={translatedResult} isTranslated={isTranslated}
-                    setIsTranslated={setIsTranslated} onCleanData={() => {}} isCleaning={isCleaning} 
-                    rowLimit={rowLimit} onRowLimitChange={(v) => analyzeFile(currentFile!, undefined, v)}
-                  />
-                </section>
+                  {/* Gemini AI Insight - Full Width with Special Styling */}
+                  {aiInsight && (
+                    <motion.section
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                      className="lg:col-span-12"
+                    >
+                      <div className="glass-card rounded-3xl p-10 apple-gradient apple-glow relative overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/10 opacity-50" />
+                        <div className="relative flex items-center gap-8">
+                          <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20 backdrop-blur-sm">
+                            <Sparkles className="w-10 h-10 text-primary animate-pulse" />
+                          </div>
+                          <div className="flex-1 text-left">
+                            <p className="text-xs font-black text-primary/60 uppercase tracking-[0.3em] mb-3">
+                              Gemini AI Analysis Report
+                            </p>
+                            <h3 className="text-2xl font-bold leading-relaxed text-slate-900 tracking-tight">
+                              "{aiInsight.trim()}"
+                            </h3>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.section>
+                  )}
 
-                <section className="space-y-4 w-full">
-                  <div className="flex items-center gap-3 px-2 justify-start text-left">
-                    <Layout className="w-5 h-5 text-[#0066FF]" />
-                    <h3 className="text-lg font-semibold text-[#1A1F36]">AI 데이터 요약</h3>
-                  </div>
-                  <div className="w-full bg-white rounded-2xl shadow-sm border border-[#E5E9F0] relative text-left">
-                    <VisualInsight headers={displayHeaders} previewRows={result.preview_rows} onElementClick={setFilterValue} activeFilter={filterValue} />
-                  </div>
-                </section>
+                  {/* Data Cleaning Section - Left Column */}
+                  <motion.section
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                    className="lg:col-span-6"
+                  >
+                    <DataCleaningSection 
+                      data={translatedUploadedData || undefined} 
+                      result={translatedResult || undefined} 
+                      isTranslated={isTranslated}
+                      setIsTranslated={setIsTranslated} 
+                      onCleanData={() => {}} 
+                      isCleaning={isCleaning} 
+                      rowLimit={rowLimit} 
+                      onRowLimitChange={(v) => currentFile && analyzeFile(currentFile, undefined, v)}
+                    />
+                  </motion.section>
 
-                <section className="w-full"><SmartInsightsPanel data={translatedResult} result={translatedResult} /></section>
-                
-                <section className="bg-white rounded-2xl shadow-sm overflow-hidden border border-[#E5E9F0] text-left w-full">
-                    <DataTable result={translatedResult} filterColumn={null} filterValue={filterValue} />
-                </section>
+                  {/* Smart Insights Panel - Right Column */}
+                  {translatedResult && translatedUploadedData && (
+                    <motion.section
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.6, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                      className="lg:col-span-6"
+                    >
+                      <SmartInsightsPanel data={translatedUploadedData} result={translatedResult} />
+                    </motion.section>
+                  )}
+
+                  {/* Visual Insight - Full Width */}
+                  <motion.section
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                    className="lg:col-span-12"
+                  >
+                    {result && (
+                      <VisualInsight 
+                        headers={displayHeaders} 
+                        previewRows={result.preview_rows} 
+                        onElementClick={setFilterValue} 
+                        activeFilter={filterValue} 
+                      />
+                    )}
+                  </motion.section>
+
+                  {/* Data Table - Full Width */}
+                  <motion.section
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                    className="lg:col-span-12"
+                  >
+                    {translatedResult && (
+                      <DataTable 
+                        result={translatedResult} 
+                        filterColumn={null} 
+                        filterValue={filterValue} 
+                      />
+                    )}
+                  </motion.section>
+                </div>
               </div>
             )}
-          </div>
         </div>
       </main>
     </div>

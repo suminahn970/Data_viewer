@@ -49,9 +49,9 @@ export function DataTable({ result, filterColumn, filterValue }: DataTableProps)
 
   if (!result || !result.headers || !result.preview_rows) {
     return (
-      <Card className="rounded-[32px] border-none bg-white p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-        <h2 className="text-lg font-bold text-slate-900 mb-4">데이터 상세 내역</h2>
-        <p className="text-slate-400 text-sm">데이터를 업로드하면 여기에 상세 표가 나타납니다.</p>
+      <Card className="glass-card rounded-3xl p-10">
+        <h2 className="text-xl font-bold text-slate-900 mb-4 tracking-tight">데이터 상세 내역</h2>
+        <p className="text-slate-500 text-base font-medium">데이터를 업로드하면 여기에 상세 표가 나타납니다.</p>
       </Card>
     )
   }
@@ -64,8 +64,8 @@ export function DataTable({ result, filterColumn, filterValue }: DataTableProps)
   }
 
   return (
-    <Card className="rounded-[32px] border-none bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-1000">
-      <div className="p-8 border-b border-slate-50">
+    <Card className="glass-card rounded-3xl overflow-hidden">
+      <div className="p-10 border-b border-gray-100/50 bg-white/30 backdrop-blur-sm">
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-bold text-slate-900 tracking-tight">상세 데이터 내역</h2>

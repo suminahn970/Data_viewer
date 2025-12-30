@@ -1,34 +1,29 @@
-import OpenAI from "openai";
-
-// ⭐️ 키가 있는지 콘솔에서 직접 확인하는 로직 추가
-const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
-
-const openai = new OpenAI({
-  apiKey: apiKey || "", 
-  dangerouslyAllowBrowser: true,
-});
-
-export const generateDataInsight = async (headers: string[], rows: any[]) => {
-  if (!apiKey) {
-    console.error("OpenAI API 키가 설정되지 않았습니다!");
-    return "API 키를 확인해 주세요.";
-  }
-
+// lib/gpt.ts
+// 클라이언트 사이드에서 서버 API 호출 (API 키는 서버에서 관리)
+export const generateDataInsight = async (
+  headers: string[], 
+  rows: any[],
+  provider: 'openai' | 'gemini' = 'openai'
+): Promise<string> => {
   try {
-    const dataSample = rows.slice(0, 5).map(row => row.join(" | ")).join("\n");
-    
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "너는 데이터 분석가야. 한글 50자 이내로 요약해줘." },
-        { role: "user", content: `데이터: ${dataSample}` }
-      ],
+    const response = await fetch('/api/insight', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ headers, rows, provider }),
     });
 
-    return completion.choices[0].message.content;
-  } catch (error: any) {
-    // ⭐️ 여기서 실제 에러 원인을 콘솔에 찍어줍니다.
-    console.error("GPT 호출 실제 에러:", error.message);
-    return "데이터를 정밀 분석 중입니다..."; 
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || '서버 오류가 발생했습니다.');
+    }
+
+    const data = await response.json();
+    return data.insight || "분석 완료";
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "알 수 없는 오류";
+    console.error("AI 인사이트 생성 실패:", errorMessage);
+    return "데이터를 정밀 분석 중입니다...";
   }
 };
