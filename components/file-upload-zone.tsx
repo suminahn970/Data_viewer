@@ -67,38 +67,38 @@ export function FileUploadZone({ onDataUploaded, onFileSelected }: FileUploadZon
   }
 
   return (
-    <div className="relative rounded-3xl border-2 border-dashed border-border bg-card p-12 shadow-sm backdrop-blur-sm transition-all hover:shadow-md">
+    <div className={`relative rounded-xl border-2 border-dashed ${isDragging ? 'border-[#0066FF] bg-[#0066FF]/5' : 'border-[#E5E9F0]'} bg-white p-8 shadow-sm transition-all hover:shadow-md`}>
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={cn("flex flex-col items-center justify-center transition-all", isDragging && "scale-[1.02]")}
+        className={cn("flex flex-col items-center justify-center transition-all", isDragging && "scale-[1.01]")}
       >
         {!uploadedFile ? (
           <>
-            <div className="rounded-full bg-muted p-6 mb-6">
-              <Upload className="h-8 w-8 text-muted-foreground" />
+            <div className="rounded-xl bg-[#0066FF]/10 p-4 mb-4">
+              <Upload className="h-6 w-6 text-[#0066FF]" />
             </div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">Drop your CSV file here, or browse</h3>
-            <p className="text-sm text-muted-foreground mb-6">Supports CSV files up to 10MB</p>
+            <h3 className="text-base font-semibold text-[#1A1F36] mb-1">CSV 파일을 드래그하거나 선택하세요</h3>
+            <p className="text-sm text-[#6B7280] mb-6">최대 10MB까지 지원</p>
             <label htmlFor="file-upload">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl px-6 shadow-sm">
-                Browse Files
+              <Button className="bg-[#0066FF] hover:bg-[#0052CC] text-white rounded-lg px-6 shadow-sm">
+                파일 선택
               </Button>
               <input id="file-upload" type="file" accept=".csv" className="hidden" onChange={handleFileSelect} />
             </label>
           </>
         ) : (
-          <div className="flex items-center gap-4">
-            <div className="rounded-xl bg-primary/10 p-3">
-              <FileText className="h-6 w-6 text-primary" />
+          <div className="flex items-center gap-4 w-full">
+            <div className="rounded-lg bg-[#0066FF]/10 p-3">
+              <FileText className="h-5 w-5 text-[#0066FF]" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-medium text-foreground">{uploadedFile.name}</p>
-              <p className="text-xs text-muted-foreground">{(uploadedFile.size / 1024).toFixed(2)} KB</p>
+              <p className="text-sm font-semibold text-[#1A1F36]">{uploadedFile.name}</p>
+              <p className="text-xs text-[#6B7280]">{(uploadedFile.size / 1024).toFixed(2)} KB</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={handleRemove} className="rounded-full h-8 w-8 p-0">
-              <X className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={handleRemove} className="rounded-lg h-8 w-8 p-0 hover:bg-[#F7F9FC]">
+              <X className="h-4 w-4 text-[#6B7280]" />
             </Button>
           </div>
         )}

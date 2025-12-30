@@ -103,82 +103,81 @@ export function DataCleaningSection({
   if (!currentHeaders.length) return null
 
   return (
-    <Card className="rounded-[32px] border-none bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden h-full flex flex-col animate-in fade-in duration-700">
-      <div className="px-8 py-6 border-b border-slate-50 flex justify-between items-center bg-white/50 backdrop-blur-sm">
+    <Card className="rounded-xl border border-[#E5E9F0] bg-white shadow-sm overflow-hidden h-full flex flex-col">
+      <div className="px-6 py-5 border-b border-[#E5E9F0] flex justify-between items-center bg-white">
         <div className="flex items-center gap-4">
-          <h2 className="text-md font-bold text-slate-900 tracking-tight text-left">데이터 관리</h2>
+          <h2 className="text-base font-semibold text-[#1A1F36] tracking-tight text-left">데이터 관리</h2>
           
           <Button 
             onClick={onCleanData} 
             disabled={isCleaning || (!data && !result)}
             variant="outline" 
-            className="h-9 border-primary/20 text-primary text-[11px] font-bold rounded-2xl px-5 hover:bg-primary/5 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+            className="h-8 border-[#0066FF]/20 text-[#0066FF] text-xs font-semibold rounded-lg px-4 hover:bg-[#0066FF]/5 transition-all shadow-sm disabled:opacity-50"
           >
             {isCleaning ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-2" />}
             {isCleaning ? "정제 중..." : "정제 실행"}
           </Button>
 
           {result && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 animate-in zoom-in-95">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/20">
               <CheckCircle2 className="w-3 h-3" />
               정제 완료
             </span>
           )}
         </div>
         
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2.5 bg-slate-50/80 px-3 py-1.5 rounded-2xl border border-slate-100 shadow-inner">
-            <Database className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-left">범위</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-[#F7F9FC] px-3 py-1.5 rounded-lg border border-[#E5E9F0]">
+            <Database className="w-3.5 h-3.5 text-[#6B7280]" />
+            <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide text-left">범위</span>
             <Select value={rowLimit} onValueChange={onRowLimitChange}>
-              <SelectTrigger className="w-[100px] h-7 border-none bg-transparent shadow-none font-bold text-slate-700 text-[11px] focus:ring-0 p-0 text-left">
+              <SelectTrigger className="w-[100px] h-7 border-none bg-transparent shadow-none font-semibold text-[#1A1F36] text-xs focus:ring-0 p-0 text-left">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="rounded-xl border-slate-100">
-                <SelectItem value="10" className="text-[11px] font-bold text-left">10개 샘플</SelectItem>
-                <SelectItem value="50" className="text-[11px] font-bold text-left">50개 샘플</SelectItem>
-                <SelectItem value="all" className="text-[11px] font-bold text-left">전체 데이터</SelectItem>
+              <SelectContent className="rounded-lg border-[#E5E9F0]">
+                <SelectItem value="10" className="text-xs font-medium text-left">10개 샘플</SelectItem>
+                <SelectItem value="50" className="text-xs font-medium text-left">50개 샘플</SelectItem>
+                <SelectItem value="all" className="text-xs font-medium text-left">전체 데이터</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div className="h-6 w-[1px] bg-slate-200" />
+          <div className="h-6 w-[1px] bg-[#E5E9F0]" />
 
-          <div className="flex items-center gap-2.5 bg-slate-50/80 px-3 py-1.5 rounded-2xl border border-slate-100 shadow-inner">
-            <Languages className={`w-3.5 h-3.5 ${isTranslated ? 'text-primary' : 'text-slate-400'}`} />
-            <span className={`text-[10px] font-bold ${isTranslated ? 'text-primary' : 'text-slate-400'} uppercase tracking-widest text-left`}>
+          <div className="flex items-center gap-2 bg-[#F7F9FC] px-3 py-1.5 rounded-lg border border-[#E5E9F0]">
+            <Languages className={`w-3.5 h-3.5 ${isTranslated ? 'text-[#0066FF]' : 'text-[#6B7280]'}`} />
+            <span className={`text-xs font-semibold ${isTranslated ? 'text-[#0066FF]' : 'text-[#6B7280]'} uppercase tracking-wide text-left`}>
               한글화
             </span>
             <Switch 
               checked={isTranslated} 
               onCheckedChange={setIsTranslated} 
-              className="data-[state=checked]:bg-primary scale-75 shadow-none"
+              className="data-[state=checked]:bg-[#0066FF] scale-75 shadow-none"
             />
           </div>
         </div>
       </div>
 
-      <div className="p-8 flex-1 flex flex-col">
-        {/* ⭐️ [수정] 그리드 시스템 적용 - 하단 테이블 너비와 일치시킴 */}
-        <div className="mb-8">
+      <div className="p-6 flex-1 flex flex-col">
+        <div className="mb-6">
           <div className="flex items-center gap-2 mb-4 text-left">
-             <Layout className="w-3.5 h-3.5 text-slate-300" />
-             <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest text-left">표시 컬럼 설정</h3>
+             <Layout className="w-3.5 h-3.5 text-[#6B7280]" />
+             <h3 className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide text-left">표시 컬럼 설정</h3>
           </div>
           
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 text-left">
             {currentHeaders.map((header) => (
               <div
                 key={header}
-                className="flex items-center justify-between px-4 py-3 rounded-xl border border-slate-100 bg-slate-50/30 hover:bg-white hover:border-primary/20 hover:shadow-md transition-all duration-200 group"
+                className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#E5E9F0] bg-[#F7F9FC] hover:bg-white hover:border-[#0066FF]/30 hover:shadow-sm transition-all duration-200 group"
               >
-                <div className="flex items-center gap-3 overflow-hidden text-left">
+                <div className="flex items-center gap-2.5 overflow-hidden text-left">
                   <Switch
                     checked={columnVisibility[header] !== false}
                     onCheckedChange={() => toggleColumn(header)}
-                    className="scale-75 data-[state=checked]:bg-primary"
+                    className="scale-75 data-[state=checked]:bg-[#0066FF]"
                   />
-                  <span className="text-[11px] font-bold text-slate-500 group-hover:text-primary truncate transition-colors text-left">
+                  <span className="text-xs font-medium text-[#6B7280] group-hover:text-[#0066FF] truncate transition-colors text-left">
                     {isTranslated ? smartTranslate(header) : header}
                   </span>
                 </div>
@@ -187,12 +186,12 @@ export function DataCleaningSection({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-100 overflow-hidden bg-white flex-1 shadow-inner">
+        <div className="rounded-lg border border-[#E5E9F0] overflow-hidden bg-white flex-1">
           <Table>
-            <TableHeader className="bg-slate-50/50">
-              <TableRow className="hover:bg-transparent border-slate-100">
+            <TableHeader className="bg-[#F7F9FC]">
+              <TableRow className="hover:bg-transparent border-[#E5E9F0]">
                 {visibleHeaders.map((header) => (
-                  <TableHead key={header} className="text-[10px] font-bold text-slate-400 py-4 uppercase tracking-tighter text-left">
+                  <TableHead key={header} className="text-xs font-semibold text-[#6B7280] py-3 uppercase tracking-wide text-left">
                     {isTranslated ? smartTranslate(header) : header}
                   </TableHead>
                 ))}
@@ -201,11 +200,11 @@ export function DataCleaningSection({
             <TableBody>
               {displayRows.length > 0 ? (
                 displayRows.map((row, rowIndex) => (
-                  <TableRow key={rowIndex} className="hover:bg-slate-50/30 border-slate-50 transition-colors text-left">
+                  <TableRow key={rowIndex} className="hover:bg-[#F7F9FC] border-[#E5E9F0] transition-colors text-left">
                     {visibleHeaders.map((header, cellIndex) => {
                       const headerIndex = currentHeaders.indexOf(header)
                       return (
-                        <TableCell key={cellIndex} className="text-[11px] font-medium text-slate-600 py-4 text-left">
+                        <TableCell key={cellIndex} className="text-xs font-medium text-[#1A1F36] py-3 text-left">
                           {row[headerIndex] !== undefined ? String(row[headerIndex]) : "-"}
                         </TableCell>
                       )
@@ -214,7 +213,7 @@ export function DataCleaningSection({
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={visibleHeaders.length} className="text-center py-12 text-xs text-slate-300 font-bold text-left">
+                  <TableCell colSpan={visibleHeaders.length} className="text-center py-12 text-xs text-[#6B7280] font-medium text-left">
                     데이터가 존재하지 않습니다.
                   </TableCell>
                 </TableRow>

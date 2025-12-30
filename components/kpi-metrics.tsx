@@ -32,13 +32,13 @@ export function KpiMetrics({ displayMetrics = [], mainFeature }: KpiMetricsProps
 
   if (displayMetrics.length === 0) {
     return (
-      <div className="grid gap-6 md:grid-cols-3">
-        {[1, 2, 3].map((index) => (
-          <Card key={index} className="rounded-[32px] border-none bg-white p-8 shadow-sm animate-pulse">
-            <div className="space-y-6">
-              <div className="h-4 w-20 bg-slate-100 rounded" />
-              <div className="h-10 w-32 bg-slate-100 rounded" />
-              <div className="h-[80px] bg-slate-50 rounded-2xl" />
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
+        {[1, 2, 3, 4].map((index) => (
+          <Card key={index} className="rounded-xl border border-[#E5E9F0] bg-white p-6 shadow-sm animate-pulse">
+            <div className="space-y-4">
+              <div className="h-3 w-20 bg-[#E5E9F0] rounded" />
+              <div className="h-8 w-32 bg-[#E5E9F0] rounded" />
+              <div className="h-[60px] bg-[#F7F9FC] rounded-lg" />
             </div>
           </Card>
         ))}
@@ -47,57 +47,53 @@ export function KpiMetrics({ displayMetrics = [], mainFeature }: KpiMetricsProps
   }
 
   return (
-    <div className="grid gap-6 md:grid-cols-3">
+    <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
       {displayMetrics.map((metric, index) => (
         <Card
           key={index}
-          className="group rounded-[32px] border-none bg-white p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.06)] transition-all duration-500"
+          className="group rounded-xl border border-[#E5E9F0] bg-white p-6 shadow-sm hover:shadow-md hover:border-[#0066FF]/30 transition-all duration-300"
         >
-          <div className="space-y-6">
+          <div className="space-y-4">
             <div className="relative">
-              {/* ⭐️ 라벨 대비 강화 */}
-              <p className="text-[11px] font-bold text-slate-400 mb-1 uppercase tracking-widest">
+              <p className="text-xs font-semibold text-[#6B7280] mb-2 uppercase tracking-wide">
                 {metric.label}
               </p>
               
               <div className="flex items-baseline gap-1">
-                {/* ⭐️ 화폐 단위가 앞에 붙는 경우 ($1,000) */}
                 {(metric.unit === "₩" || metric.unit === "$") && (
-                  <span className="text-xl font-bold text-slate-900 mr-0.5">{metric.unit}</span>
+                  <span className="text-lg font-semibold text-[#1A1F36] mr-0.5">{metric.unit}</span>
                 )}
                 
-                {/* ⭐️ 수치 폰트 굵기 강화 */}
-                <p className="text-4xl font-extrabold text-slate-900 tracking-tighter">
+                <p className="text-3xl font-semibold text-[#1A1F36] tracking-tight">
                   {formatValue(metric.value, metric.label)}
                 </p>
                 
-                {/* ⭐️ 화폐 외 단위가 뒤에 붙는 경우 (35.4 세) */}
                 {metric.unit && metric.unit !== "₩" && metric.unit !== "$" && (
-                  <span className="text-lg font-bold text-slate-400 ml-1">{metric.unit}</span>
+                  <span className="text-base font-medium text-[#6B7280] ml-1">{metric.unit}</span>
                 )}
               </div>
 
               {mainFeature && (
-                <span className="absolute top-0 right-0 px-2 py-0.5 bg-primary/5 text-primary text-[10px] font-bold rounded-full border border-primary/10">
+                <span className="absolute top-0 right-0 px-2 py-0.5 bg-[#0066FF]/10 text-[#0066FF] text-[10px] font-semibold rounded-lg">
                   {mainFeature}
                 </span>
               )}
             </div>
 
-            <div className="h-[80px] w-full opacity-40 group-hover:opacity-100 transition-opacity duration-700">
+            <div className="h-[60px] w-full opacity-50 group-hover:opacity-100 transition-opacity duration-300">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={mockChartData}>
                   <defs>
                     <linearGradient id={`lineGradient-${index}`} x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#0071e3" />
-                      <stop offset="100%" stopColor="#63b3ed" />
+                      <stop offset="0%" stopColor="#0066FF" />
+                      <stop offset="100%" stopColor="#00A3FF" />
                     </linearGradient>
                   </defs>
                   <Line
                     type="natural"
                     dataKey="value"
                     stroke={`url(#lineGradient-${index})`}
-                    strokeWidth={3}
+                    strokeWidth={2.5}
                     dot={false}
                   />
                 </LineChart>

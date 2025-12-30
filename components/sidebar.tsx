@@ -16,9 +16,9 @@ export function Sidebar() {
   const [activeItem, setActiveItem] = useState("Dashboard")
 
   return (
-    <aside className="w-[280px] border-r border-sidebar-border bg-sidebar flex flex-col">
-      <div className="p-8 border-b border-sidebar-border">
-        <h1 className="text-xl font-semibold text-sidebar-foreground">Analytics Pro</h1>
+    <aside className="w-[280px] border-r border-[#E5E9F0] bg-white flex flex-col">
+      <div className="p-6 border-b border-[#E5E9F0]">
+        <h1 className="text-lg font-semibold text-[#1A1F36]">데이터 분석</h1>
       </div>
 
       <nav className="flex-1 p-4">
@@ -28,10 +28,10 @@ export function Sidebar() {
               <button
                 onClick={() => setActiveItem(item.label)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all",
+                  "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all",
                   activeItem === item.label
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
+                    ? "bg-[#0066FF]/10 text-[#0066FF] shadow-sm"
+                    : "text-[#6B7280] hover:text-[#1A1F36] hover:bg-[#F7F9FC]",
                 )}
               >
                 <item.icon className="h-5 w-5" />
